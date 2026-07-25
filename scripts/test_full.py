@@ -86,6 +86,10 @@ app.processEvents()
 win._actualizar_preview()
 app.processEvents()
 check("MainWindow crea preview", win.preview.label.pixmap() is not None)
+check("el flujo diario abre directamente en el texto", win.paginas_documento.currentIndex() == 1)
+win._copiar_texto()
+check("copiar texto usa contenido plano", "documentación" in QApplication.clipboard().text()
+      and "<" not in QApplication.clipboard().text())
 
 # --- la rueda desplaza la pantalla, no cambia controles por accidente ---
 class _RuedaFalsa:

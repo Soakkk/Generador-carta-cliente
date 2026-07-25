@@ -251,19 +251,15 @@ PLANTILLAS: list[Plantilla] = [
         titulo_tpl="Solicitud de documentación — {periodo} de {anio}",
         cuerpo_tpl="""Estimado/a {cliente}:
 
-Con motivo de la presentación de los impuestos correspondientes al *{periodo} de {anio}*, le rogamos que nos remita la documentación necesaria para poder preparar y presentar sus obligaciones fiscales dentro del plazo establecido.
-
-En concreto, necesitamos la siguiente documentación:
+Para preparar los impuestos del *{periodo} de {anio}*, necesitamos que nos envíe la siguiente documentación:
 
 {documentos}
 
-Le agradeceríamos que nos hiciera llegar toda la documentación *antes del {fecha_limite}*, con el fin de poder revisarla con tiempo suficiente y presentar los impuestos dentro de plazo.
-
 {notas}
 
-Agradecemos de antemano su colaboración y quedamos a su disposición para cualquier consulta o aclaración.
+Por favor, envíenos la documentación *antes del {fecha_limite}* para que podamos revisarla y presentar los impuestos dentro de plazo.
 
-Reciba un cordial saludo.""",
+Muchas gracias. Quedamos a su disposición para cualquier consulta.""",
     ),
     Plantilla(
         id="recordatorio",
@@ -278,15 +274,13 @@ Le recordamos que el plazo de presentación de las liquidaciones correspondiente
 
 {tabla_plazos}
 
-Para poder confeccionar y presentar las liquidaciones en plazo, le pedimos que nos haga llegar, cuanto antes, la documentación que se detalla a continuación:
+Para prepararlas, necesitamos esta documentación:
 
 {documentos}
 
 {notas}
 
-Sin otro particular, quedamos a su entera disposición para cualquier consulta o aclaración que pudiera precisar.
-
-Reciba un cordial saludo.""",
+Por favor, envíenosla cuanto antes. Quedamos a su disposición para cualquier consulta.""",
     ),
     Plantilla(
         id="cierre_anual",
@@ -299,17 +293,15 @@ Reciba un cordial saludo.""",
 
 {felicitacion_navidad}
 
-Con motivo del cierre del ejercicio *{anio}*, le informamos de sus próximas obligaciones fiscales. Para poder revisar su documentación y presentar sus impuestos dentro de los plazos legales, necesitamos que nos remita la siguiente información:
+Para preparar el cierre del ejercicio *{anio}*, necesitamos la siguiente documentación:
 
 {documentos}
 
-Le agradeceríamos que nos remitiera la documentación *antes del {fecha_limite}*, con el fin de garantizar la presentación en plazo de sus impuestos.
-
 {notas}
 
-Quedamos a su disposición para cualquier duda o aclaración.
+Por favor, envíenosla *antes del {fecha_limite}* para que podamos revisarla y presentar los impuestos dentro de plazo.
 
-Reciba un cordial saludo.""",
+Muchas gracias. Quedamos a su disposición para cualquier consulta.""",
     ),
     Plantilla(
         id="renta_arrend",
@@ -320,19 +312,15 @@ Reciba un cordial saludo.""",
         titulo_tpl="Solicitud de información — Bienes arrendados · Renta {anio}",
         cuerpo_tpl="""Estimado/a {cliente}:
 
-Con motivo de la preparación de su declaración de la Renta del ejercicio *{anio}*, necesitamos que nos facilite la información relativa a los bienes que haya tenido arrendados durante el año.
-
-De cada bien arrendado necesitamos lo siguiente:
+Para preparar su declaración de la Renta del ejercicio *{anio}*, necesitamos esta información de cada inmueble que haya tenido arrendado:
 
 {documentos}
 
-Le rogamos que nos lo haga llegar *antes del {fecha_limite}* para poder preparar su declaración con tiempo suficiente.
-
 {notas}
 
-Agradecemos de antemano su colaboración y quedamos a su disposición.
+Por favor, envíenosla *antes del {fecha_limite}* para poder preparar su declaración con tiempo suficiente.
 
-Reciba un cordial saludo.""",
+Muchas gracias. Quedamos a su disposición para cualquier consulta.""",
     ),
 ]
 

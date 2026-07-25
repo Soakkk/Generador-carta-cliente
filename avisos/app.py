@@ -7,7 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import QByteArray, QDate, QSize, QStringListModel, Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QFont, QIcon, QPixmap, QTextListFormat
 from PySide6.QtWidgets import (
-    QAbstractItemView, QButtonGroup, QCheckBox, QComboBox, QCompleter,
+    QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QComboBox, QCompleter,
     QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox,
     QHBoxLayout, QLabel, QLineEdit, QListView, QListWidget, QListWidgetItem, QMainWindow,
     QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSplitter,
@@ -101,7 +101,7 @@ class MainWindow(QMainWindow):
 
         cabecera = QFrame()
         cabecera.setObjectName("cabecera")
-        cabecera.setFixedHeight(72)
+        cabecera.setFixedHeight(64)
         lc = QHBoxLayout(cabecera)
         lc.setContentsMargins(22, 10, 22, 10)
         logo = QLabel()
@@ -112,7 +112,7 @@ class MainWindow(QMainWindow):
         marca = QVBoxLayout()
         titulo = QLabel("Avisos Asesoría E. Marín")
         titulo.setObjectName("marca")
-        subtitulo = QLabel("Avisos claros, listos para enviar")
+        subtitulo = QLabel("Documentación trimestral y Renta")
         subtitulo.setObjectName("marcaSubtitulo")
         marca.addWidget(titulo)
         marca.addWidget(subtitulo)
@@ -162,28 +162,30 @@ class MainWindow(QMainWindow):
         fila.addWidget(self.lbl_estado)
         fila.addStretch(1)
 
-        fila.addWidget(QLabel("Guardar en:"))
-        self.lbl_destino = QLabel("")
-        self.lbl_destino.setObjectName("rutaDestino")
-        self.lbl_destino.setMinimumWidth(150)
-        fila.addWidget(self.lbl_destino)
-        btn_destino = QPushButton("Cambiar…")
-        btn_destino.clicked.connect(self._elegir_carpeta_destino)
-        fila.addWidget(btn_destino)
+        self.btn_copiar = QPushButton("Copiar texto")
+        self.btn_copiar.setObjectName("primario")
+        self.btn_copiar.setMinimumHeight(40)
+        self.btn_copiar.clicked.connect(self._copiar_texto)
+        fila.addWidget(self.btn_copiar)
 
-        btn_lote = QPushButton("Varios clientes")
-        btn_lote.clicked.connect(self._abrir_lote)
-        fila.addWidget(btn_lote)
-
-        btn_generar_abrir = QPushButton("Generar y abrir")
-        btn_generar_abrir.clicked.connect(lambda: self._guardar_pdf(abrir=True))
-        fila.addWidget(btn_generar_abrir)
-
-        self.btn_pdf = QPushButton("Generar PDF")
-        self.btn_pdf.setObjectName("primario")
+        self.btn_pdf = QPushButton("Guardar PDF…")
         self.btn_pdf.setMinimumHeight(40)
         self.btn_pdf.clicked.connect(lambda: self._guardar_pdf(abrir=False))
         fila.addWidget(self.btn_pdf)
+
+        btn_generar_abrir = QPushButton("Guardar y abrir")
+        btn_generar_abrir.clicked.connect(lambda: self._guardar_pdf(abrir=True))
+        fila.addWidget(btn_generar_abrir)
+
+        btn_destino = QToolButton()
+        btn_destino.setText("Carpeta de PDF…")
+        btn_destino.setToolTip("Cambiar dónde se guardan los PDF")
+        btn_destino.clicked.connect(self._elegir_carpeta_destino)
+        fila.addWidget(btn_destino)
+
+        self.lbl_destino = QLabel("")
+        self.lbl_destino.setObjectName("rutaDestino")
+        self.lbl_destino.setVisible(False)
         self._actualizar_destino_ui()
         return barra
 
@@ -202,7 +204,7 @@ class MainWindow(QMainWindow):
 
         titulo = QLabel("Nuevo aviso")
         titulo.setObjectName("tituloSeccion")
-        ayuda = QLabel("Elige los datos y comprueba el resultado a la derecha.")
+        ayuda = QLabel("El periodo y la fecha se calculan automáticamente.")
         ayuda.setObjectName("textoSuave")
         ayuda.setWordWrap(True)
         col.addWidget(titulo)
@@ -379,17 +381,16 @@ class MainWindow(QMainWindow):
         lay.setContentsMargins(14, 14, 14, 14)
 
         cab = QHBoxLayout()
-        self.lbl_titulo_documento = QLabel("Vista previa del aviso")
+        self.lbl_titulo_documento = QLabel("Texto listo para enviar")
         self.lbl_titulo_documento.setObjectName("tituloSeccion")
         cab.addWidget(self.lbl_titulo_documento)
         cab.addStretch(1)
         self.grupo_modo = QButtonGroup(self)
         self.grupo_modo.setExclusive(True)
-        self.btn_modo_preview = QPushButton("Vista previa")
+        self.btn_modo_preview = QPushButton("Vista previa PDF")
         self.btn_modo_preview.setObjectName("segmento")
         self.btn_modo_preview.setCheckable(True)
-        self.btn_modo_preview.setChecked(True)
-        self.btn_modo_editor = QPushButton("Editar contenido")
+        self.btn_modo_editor = QPushButton("Texto")
         self.btn_modo_editor.setObjectName("segmento")
         self.btn_modo_editor.setCheckable(True)
         self.grupo_modo.addButton(self.btn_modo_preview)
@@ -399,7 +400,9 @@ class MainWindow(QMainWindow):
         cab.addWidget(self.btn_modo_preview)
         cab.addWidget(self.btn_modo_editor)
         lay.addLayout(cab)
-        ayuda = QLabel("El resultado de la derecha es el que se guardará en el PDF.")
+        ayuda = QLabel(
+            "Este es el texto plano que puedes copiar y pegar en WhatsApp o correo. "
+            "También puedes guardarlo como PDF.")
         ayuda.setObjectName("textoSuave")
         lay.addWidget(ayuda)
 
@@ -457,6 +460,8 @@ class MainWindow(QMainWindow):
         doc_lay.addWidget(pista)
 
         self.paginas_documento.addWidget(doc_tab)
+        self.paginas_documento.setCurrentIndex(1)
+        self.btn_modo_editor.setChecked(True)
         lay.addWidget(self.paginas_documento, 1)
         return contenedor
 
@@ -877,11 +882,23 @@ class MainWindow(QMainWindow):
     def _mostrar_modo(self, indice: int) -> None:
         self.paginas_documento.setCurrentIndex(indice)
         self.lbl_titulo_documento.setText(
-            "Vista previa del aviso" if indice == 0 else "Contenido del aviso")
+            "Vista previa PDF" if indice == 0 else "Texto listo para enviar")
         self.btn_modo_preview.setChecked(indice == 0)
         self.btn_modo_editor.setChecked(indice == 1)
         if indice == 0:
             self._actualizar_preview()
+
+    def _copiar_texto(self) -> None:
+        """Copia el aviso sin formato para pegarlo en WhatsApp o correo."""
+        if not self._resolver_datos_pendientes():
+            return
+        texto = self.editor.toPlainText().strip()
+        if not texto:
+            QMessageBox.warning(self, "Aviso vacío", "No hay texto para copiar.")
+            return
+        QApplication.clipboard().setText(texto)
+        self._registrar_uso_plantilla()
+        self._set_estado("Texto copiado. Ya puedes pegarlo en WhatsApp o correo.")
 
     def _programar_preview(self) -> None:
         self._timer.start()
