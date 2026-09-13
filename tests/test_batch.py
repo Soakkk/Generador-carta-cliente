@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from avisos.batch import BatchItem, BatchState, cargar_lote, guardar_lote
 
 
@@ -148,5 +150,50 @@ def test_dialogo_reanuda_con_todo_el_contexto_persistido(monkeypatch, tmp_path):
     assert dialogo._ctx_base.notas == "Nota anterior"
     assert dialogo._documento_tpl == ("Título anterior {anio}", "Cuerpo anterior {documentos}")
     assert dialogo._extras_etiquetas == ["Etiqueta anterior"]
+    dialogo.deleteLater()
+    app.processEvents()
+
+
+def test_reintento_tras_fallo_de_registro_no_duplica_el_pdf(monkeypatch, tmp_path):
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+    from PySide6.QtWidgets import QApplication
+    from avisos.templates import Contexto, PLANTILLAS
+    from avisos.ui import lote as modulo_lote
+
+    app = QApplication.instance() or QApplication([])
+    destino = tmp_path / "pdf"
+    destino.mkdir()
+    dialogo = modulo_lote.LoteDialog(None, Contexto(), PLANTILLAS[0], str(destino))
+    dialogo._iniciar_lote(["Uno SL"])
+    renders: list[str] = []
+    registros = 0
+
+    def render_falso(_ctx, _titulo, _cuerpo, ruta):
+        renders.append(str(ruta))
+        ruta.write_bytes(b"pdf")
+
+    def registrar_falso(*_args, **_kwargs):
+        nonlocal registros
+        registros += 1
+        if registros == 1:
+            raise RuntimeError("historial bloqueado")
+
+    monkeypatch.setattr(modulo_lote, "render_pdf_plantilla_texto", render_falso)
+    monkeypatch.setattr(modulo_lote.H, "registrar", registrar_falso)
+    monkeypatch.setattr(modulo_lote.C, "cargar", lambda: [])
+    monkeypatch.setattr(modulo_lote.C, "asegurar_cliente", lambda *_a: None)
+    monkeypatch.setattr(modulo_lote.C, "registrar_uso", lambda *_a: None)
+
+    dialogo._procesar_lote()
+    item = dialogo._lote.por_id("1")
+    assert item.estado == "fallido"
+    assert item.salida == renders[0]
+    assert Path(item.salida).exists()
+
+    dialogo._reintentar_fallidos()
+    assert dialogo._lote.por_id("1").estado == "completado"
+    assert renders == [item.salida]
+    assert list(destino.glob("*.pdf")) == [Path(item.salida)]
     dialogo.deleteLater()
     app.processEvents()

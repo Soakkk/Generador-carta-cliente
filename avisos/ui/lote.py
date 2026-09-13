@@ -315,18 +315,28 @@ class LoteDialog(QDialog):
                 cliente = C.buscar(C.cargar(), item.cliente_nif or item.nombre)
                 nif = cliente.nif if cliente else item.cliente_nif
                 ctx = replace(self._ctx_base, cliente=item.nombre, nif=nif)
-                ruta = ruta_sin_colision(
-                    Path(self._lote.carpeta), nombre_archivo(self._plantilla, ctx)
-                )
                 try:
-                    render_pdf_plantilla_texto(ctx, *self._documento_tpl, ruta)
-                    H.registrar(
-                        self._plantilla.nombre, ctx.periodo_corto, ctx.anio,
-                        item.nombre, str(ruta), plantilla_id=self._plantilla.id,
-                        documentos=ctx.documentos, extras=self._extras_etiquetas,
-                        navidad=ctx.navidad, notas=ctx.notas,
-                        titulo_tpl=self._documento_tpl[0], cuerpo_tpl=self._documento_tpl[1],
-                    )
+                    if item.pdf_generado and item.salida and Path(item.salida).exists():
+                        ruta = Path(item.salida)
+                    else:
+                        ruta = (
+                            Path(item.salida) if item.salida else ruta_sin_colision(
+                                Path(self._lote.carpeta), nombre_archivo(self._plantilla, ctx)
+                            )
+                        )
+                        render_pdf_plantilla_texto(ctx, *self._documento_tpl, ruta)
+                        self._lote.marcar_pdf(item.id, str(ruta))
+                        guardar_lote(self._lote)
+                    if not item.historial_registrado:
+                        H.registrar(
+                            self._plantilla.nombre, ctx.periodo_corto, ctx.anio,
+                            item.nombre, str(ruta), plantilla_id=self._plantilla.id,
+                            documentos=ctx.documentos, extras=self._extras_etiquetas,
+                            navidad=ctx.navidad, notas=ctx.notas,
+                            titulo_tpl=self._documento_tpl[0], cuerpo_tpl=self._documento_tpl[1],
+                        )
+                        self._lote.marcar_historial(item.id)
+                        guardar_lote(self._lote)
                     C.asegurar_cliente(item.nombre, nif)
                     C.registrar_uso(item.nombre)
                     self._lote.marcar_ok(item.id, str(ruta))

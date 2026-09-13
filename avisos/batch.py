@@ -20,6 +20,8 @@ class BatchItem:
     error: str = ""
     intentos: int = 0
     nombre: str = ""
+    pdf_generado: bool = False
+    historial_registrado: bool = False
 
 
 @dataclass
@@ -53,10 +55,19 @@ class BatchState:
         item.salida = str(salida)
         item.error = ""
 
+    def marcar_pdf(self, item_id: str, salida: str) -> None:
+        item = self.por_id(item_id)
+        item.salida = str(salida)
+        item.pdf_generado = True
+
+    def marcar_historial(self, item_id: str) -> None:
+        self.por_id(item_id).historial_registrado = True
+
     def marcar_error(self, item_id: str, error: str) -> None:
         item = self.por_id(item_id)
         item.estado = "fallido"
-        item.salida = ""
+        if not item.pdf_generado:
+            item.salida = ""
         item.error = str(error)
 
     def cancelar(self) -> None:
@@ -91,7 +102,10 @@ class BatchState:
             try:
                 item = BatchItem(**{
                     clave: dato[clave]
-                    for clave in ("id", "cliente_nif", "estado", "salida", "error", "intentos", "nombre")
+                    for clave in (
+                        "id", "cliente_nif", "estado", "salida", "error", "intentos", "nombre",
+                        "pdf_generado", "historial_registrado",
+                    )
                     if clave in dato
                 })
             except (KeyError, TypeError, ValueError):
@@ -129,4 +143,3 @@ def cargar_lote(root: str | Path | None = None) -> BatchState | None:
 
 def borrar_lote(root: str | Path | None = None) -> None:
     _ruta(root).unlink(missing_ok=True)
-
