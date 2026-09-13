@@ -4,6 +4,12 @@ import sys
 import tempfile
 from pathlib import Path
 
+# Permite ejecutar este archivo directamente desde la raíz del repositorio,
+# tal y como indican README y el plan de release, sin depender de PYTHONPATH.
+RAIZ = Path(__file__).resolve().parent.parent
+if str(RAIZ) not in sys.path:
+    sys.path.insert(0, str(RAIZ))
+
 # Aislar la config del usuario real durante el test
 tmp_cfg = Path(tempfile.mkdtemp())
 os.environ["APPDATA"] = str(tmp_cfg)
