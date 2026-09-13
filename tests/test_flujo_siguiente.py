@@ -12,7 +12,8 @@ from avisos import history
 from avisos import templates
 from avisos.app import MainWindow
 from avisos.draft import guardar_borrador, leer_borrador
-from avisos.ui.clientes import clave_orden_cliente
+from avisos.suite_storage import ConflictoCampo
+from avisos.ui.clientes import clave_orden_cliente, guardar_clientes_con_conflictos
 
 
 @pytest.fixture(scope="module")
@@ -130,3 +131,26 @@ def test_recientes_favoritos_y_busqueda_por_nif_persisten(entorno):
     recargados = clients.cargar()
     assert sorted(recargados, key=clave_orden_cliente)[0].nombre == "Alfa SL"
     assert clients.buscar(recargados, "b00000001").nombre == "Zulu SL"
+
+
+def test_conflicto_compartido_se_muestra_y_resuelve(monkeypatch, entorno, qapp):
+    cliente = clients.Cliente(nombre="Nombre editado", nif="B12345678", email="nuevo@x.es")
+    conflicto = ConflictoCampo(
+        campo="email", existente="comun@x.es", entrante="nuevo@x.es",
+        origen_existente="Escaner", origen_entrante="AvisosEMarin",
+        actualizado_existente="2026-09-12", actualizado_entrante="2026-09-13",
+    )
+    monkeypatch.setattr(clients, "guardar", lambda _clientes: [(cliente, conflicto)])
+    decisiones: list[tuple[clients.Cliente, dict[str, str]]] = []
+    monkeypatch.setattr(
+        clients, "resolver_conflictos",
+        lambda c, resolver: decisiones.append((c, resolver)),
+    )
+    monkeypatch.setattr(
+        "avisos.ui.clientes.QMessageBox.question",
+        lambda *_a, **_k: __import__("PySide6.QtWidgets", fromlist=["QMessageBox"]).QMessageBox.Yes,
+    )
+
+    guardar_clientes_con_conflictos(None, [cliente])
+
+    assert decisiones == [(cliente, {"email": "entrante"})]

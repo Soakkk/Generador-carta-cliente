@@ -12,7 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from . import config
-from .suite_storage import fusionar_cliente, listar_clientes_comunes, normalizar_nif
+from .suite_storage import (
+    ConflictoCampo, fusionar_cliente, listar_clientes_comunes, normalizar_nif,
+)
 
 
 @dataclass
@@ -69,20 +71,31 @@ def cargar() -> list[Cliente]:
     return sorted(por_clave.values(), key=lambda c: c.nombre.casefold())
 
 
-def guardar(clientes: list[Cliente]) -> None:
+def guardar(clientes: list[Cliente]) -> list[tuple[Cliente, ConflictoCampo]]:
     ordenados = sorted(clientes, key=lambda c: c.nombre.lower())
     config.escribir_json(_ruta(), [asdict(c) for c in ordenados])
+    conflictos: list[tuple[Cliente, ConflictoCampo]] = []
     for cliente in ordenados:
         if normalizar_nif(cliente.nif):
             try:
-                fusionar_cliente(
+                resultado = fusionar_cliente(
                     asdict(cliente), origen="AvisosEMarin",
                     resolver={"favorito": "entrante", "ultimo_uso": "entrante"},
                 )
+                conflictos.extend((cliente, conflicto) for conflicto in resultado.conflictos)
             except Exception:
                 # La base histórica local sigue siendo plenamente funcional
                 # si el directorio compartido no está disponible.
                 continue
+    return conflictos
+
+
+def resolver_conflictos(cliente: Cliente, resolver: dict[str, str]) -> None:
+    """Aplica decisiones explícitas sobre conflictos del directorio común."""
+    fusionar_cliente(
+        asdict(cliente), origen="AvisosEMarin",
+        resolver={"favorito": "entrante", "ultimo_uso": "entrante", **resolver},
+    )
 
 
 def upsert(clientes: list[Cliente], nuevo: Cliente, nombre_original: str = "") -> list[Cliente]:

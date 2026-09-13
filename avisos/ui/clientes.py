@@ -1,6 +1,8 @@
 """Dialogo de gestion de la base de datos de clientes."""
 from __future__ import annotations
 
+from dataclasses import replace
+
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QHeaderView,
     QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
@@ -8,6 +10,35 @@ from PySide6.QtWidgets import (
 )
 
 from .. import clients as C
+
+
+def guardar_clientes_con_conflictos(parent, clientes: list[C.Cliente]) -> None:
+    """Guarda y pide una decisión visible por cada dato compartido distinto."""
+    pendientes = C.guardar(clientes)
+    decisiones: dict[int, tuple[C.Cliente, dict[str, str]]] = {}
+    guardar_local_de_nuevo = False
+    for cliente, conflicto in pendientes:
+        respuesta = QMessageBox.question(
+            parent,
+            "Dato distinto en el directorio común",
+            f"El campo «{conflicto.campo}» de {cliente.nombre} tiene dos valores:\n\n"
+            f"Directorio común: {conflicto.existente}\n"
+            f"Cambio actual: {conflicto.entrante}\n\n"
+            "Pulsa Sí para usar el cambio actual o No para conservar el valor compartido.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        clave = id(cliente)
+        decisiones.setdefault(clave, (replace(cliente), {}))[1][conflicto.campo] = (
+            "entrante" if respuesta == QMessageBox.Yes else "existente"
+        )
+        if respuesta != QMessageBox.Yes:
+            setattr(cliente, conflicto.campo, conflicto.existente)
+            guardar_local_de_nuevo = True
+    for cliente, resolver in decisiones.values():
+        C.resolver_conflictos(cliente, resolver)
+    if guardar_local_de_nuevo:
+        C.guardar(clientes)
 
 
 def clave_orden_cliente(cliente: C.Cliente | dict) -> tuple[bool, float, str]:
@@ -150,7 +181,7 @@ class ClientesDialog(QDialog):
                     f"Ya hay un cliente llamado «{nuevo.nombre}».")
                 return
             self._clientes = C.upsert(self._clientes, nuevo)
-            C.guardar(self._clientes)
+            guardar_clientes_con_conflictos(self, self._clientes)
             self._refrescar_tabla()
 
     def _editar(self) -> None:
@@ -161,7 +192,7 @@ class ClientesDialog(QDialog):
         dlg = EditorClienteDialog(self, original)
         if dlg.exec() == QDialog.Accepted:
             self._clientes = C.upsert(self._clientes, dlg.cliente(), original.nombre)
-            C.guardar(self._clientes)
+            guardar_clientes_con_conflictos(self, self._clientes)
             self._refrescar_tabla()
 
     def _eliminar(self) -> None:
@@ -174,5 +205,5 @@ class ClientesDialog(QDialog):
             QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
             self._clientes = C.eliminar(self._clientes, nombre)
-            C.guardar(self._clientes)
+            guardar_clientes_con_conflictos(self, self._clientes)
             self._refrescar_tabla()

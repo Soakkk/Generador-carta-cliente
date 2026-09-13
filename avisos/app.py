@@ -26,7 +26,7 @@ from . import updater as U
 from .draft import guardar_borrador, leer_borrador
 from .log import logger
 from .ui.actualizaciones import comprobar_actualizaciones, iniciar_instalador
-from .ui.clientes import ClientesDialog, EditorClienteDialog
+from .ui.clientes import ClientesDialog, EditorClienteDialog, guardar_clientes_con_conflictos
 from .ui.clientes import clave_orden_cliente
 from .ui.controles import ComboSinRueda, FechaSinRueda, SpinSinRueda
 from .ui.extras import ExtrasDialog
@@ -828,7 +828,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Cliente ya existe",
                                 f"Ya hay un cliente llamado «{nuevo.nombre}».")
             return
-        C.guardar(C.upsert(clientes, nuevo))
+        guardar_clientes_con_conflictos(self, C.upsert(clientes, nuevo))
         self._refrescar_completer_clientes()
         self.txt_cliente.setText(nuevo.nombre)
 
@@ -840,7 +840,9 @@ class MainWindow(QMainWindow):
         dlg = EditorClienteDialog(self, actual)
         if dlg.exec() == EditorClienteDialog.Accepted:
             editado = dlg.cliente()
-            C.guardar(C.upsert(clientes, editado, actual.nombre))
+            guardar_clientes_con_conflictos(
+                self, C.upsert(clientes, editado, actual.nombre)
+            )
             self._refrescar_completer_clientes()
             self.txt_cliente.setText(editado.nombre)
 
