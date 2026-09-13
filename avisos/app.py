@@ -70,6 +70,7 @@ class MainWindow(QMainWindow):
         self._instalar_al_cerrar = False
         self._restaurando_borrador = False
         self._undo_cliente: dict | None = None
+        self._undo_documento: tuple[int, str] | None = None
         self._extra_buttons: dict[str, QToolButton] = {}
         self._carpeta_destino = str(Path.home() / "Desktop")
 
@@ -101,6 +102,10 @@ class MainWindow(QMainWindow):
         menu.addAction("Historial de avisos…", self._abrir_historial)
         accion_deshacer = menu.addAction("Deshacer cambio de cliente", self._deshacer_cambio_cliente)
         accion_deshacer.setShortcut("Ctrl+Shift+Z")
+        accion_deshacer_doc = menu.addAction(
+            "Deshacer eliminación de documento", self._deshacer_eliminacion_documento
+        )
+        accion_deshacer_doc.setShortcut("Ctrl+Alt+Z")
         menu.addSeparator()
         menu.addAction("Editar plantillas…", self._abrir_editor_plantillas)
         menu.addAction("Formato del documento…", self._abrir_formato)
@@ -674,6 +679,7 @@ class MainWindow(QMainWindow):
         self._al_cambiar_datos()
 
     def _set_docs(self, docs: list[str]) -> None:
+        self._undo_documento = None
         self.lista_docs.blockSignals(True)
         self.lista_docs.clear()
         for texto in docs:
@@ -705,8 +711,21 @@ class MainWindow(QMainWindow):
     def _quitar_documento(self) -> None:
         fila = self.lista_docs.currentRow()
         if fila >= 0:
-            self.lista_docs.takeItem(fila)
+            eliminado = self.lista_docs.takeItem(fila)
+            self._undo_documento = (fila, eliminado.text())
             self._on_docs_editados()
+
+    def _deshacer_eliminacion_documento(self) -> None:
+        if self._undo_documento is None:
+            return
+        fila, texto = self._undo_documento
+        item = QListWidgetItem(texto)
+        item.setFlags(item.flags() | Qt.ItemIsEditable)
+        self._ajustar_alto_documento(item)
+        self.lista_docs.insertItem(min(fila, self.lista_docs.count()), item)
+        self.lista_docs.setCurrentItem(item)
+        self._undo_documento = None
+        self._on_docs_editados()
 
     def _mover_documento(self, delta: int) -> None:
         fila = self.lista_docs.currentRow()

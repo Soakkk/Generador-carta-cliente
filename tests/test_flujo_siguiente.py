@@ -178,3 +178,18 @@ def test_plantillas_corruptas_se_recuperan_de_copia_validada(entorno, monkeypatc
 
     assert templates.titulo_tpl_activo(plantilla) == "Título uno"
     assert ruta.with_suffix(".json.bak1").exists()
+
+
+def test_eliminacion_de_documento_se_puede_deshacer(entorno, qapp):
+    win = MainWindow()
+    win._set_docs(["Primero", "Segundo", "Tercero"])
+    win.lista_docs.setCurrentRow(1)
+    win._quitar_documento()
+    assert win._documentos_actuales() == ["Primero", "Tercero"]
+
+    win._deshacer_eliminacion_documento()
+
+    assert win._documentos_actuales() == ["Primero", "Segundo", "Tercero"]
+    assert win.lista_docs.currentRow() == 1
+    win.deleteLater()
+    qapp.processEvents()
