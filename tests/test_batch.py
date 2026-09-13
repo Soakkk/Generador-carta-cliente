@@ -154,6 +154,53 @@ def test_dialogo_reanuda_con_todo_el_contexto_persistido(monkeypatch, tmp_path):
     app.processEvents()
 
 
+def test_lote_ya_completado_no_restaura_contexto_en_serie_nueva(monkeypatch, tmp_path):
+    """Reabrir tras terminar no debe contaminar una serie nueva con datos antiguos."""
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+    from PySide6.QtWidgets import QApplication
+    from avisos.templates import Contexto, PLANTILLAS
+    from avisos.ui.lote import LoteDialog
+
+    app = QApplication.instance() or QApplication([])
+    destino = tmp_path / "pdf"
+    destino.mkdir()
+    guardado = BatchState(
+        items=[BatchItem(
+            id="1", cliente_nif="", nombre="Terminado", estado="completado",
+            salida=str(destino / "terminado.pdf"), pdf_generado=True,
+            historial_registrado=True,
+        )],
+        carpeta=str(destino),
+        configuracion={
+            "plantilla_id": PLANTILLAS[0].id,
+            "periodo": "1T",
+            "anio": 2025,
+            "documentos": ["Documento anterior"],
+            "extras": ["Etiqueta anterior"],
+            "titulo_tpl": "Título anterior",
+            "cuerpo_tpl": "Cuerpo anterior",
+        },
+    )
+    guardar_lote(guardado)
+
+    actual = Contexto(periodo="2T", anio=2026, documentos=["Documento nuevo"])
+    dialogo = LoteDialog(
+        None, actual, PLANTILLAS[0], str(destino),
+        documento_tpl=("Título nuevo", "Cuerpo nuevo"),
+        extras_etiquetas=["Etiqueta nueva"],
+    )
+
+    assert dialogo._lote is None
+    assert dialogo._ctx_base.periodo == "2T"
+    assert dialogo._ctx_base.anio == 2026
+    assert dialogo._ctx_base.documentos == ["Documento nuevo"]
+    assert dialogo._documento_tpl == ("Título nuevo", "Cuerpo nuevo")
+    assert dialogo._extras_etiquetas == ["Etiqueta nueva"]
+    dialogo.deleteLater()
+    app.processEvents()
+
+
 def test_reintento_tras_fallo_de_registro_no_duplica_el_pdf(monkeypatch, tmp_path):
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))

@@ -200,6 +200,8 @@ class LoteDialog(QDialog):
         lote = cargar_lote()
         if lote is None:
             return None
+        if not any(item.estado in ("pendiente", "fallido") for item in lote.items):
+            return None
         if lote.configuracion.get("plantilla_id") != self._plantilla.id:
             return None
         cfg = lote.configuracion
