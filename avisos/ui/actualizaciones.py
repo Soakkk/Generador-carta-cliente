@@ -6,15 +6,12 @@ lenta (especialmente en la comprobacion automatica del arranque).
 """
 from __future__ import annotations
 
-import hashlib
-import re
 import subprocess
 import tempfile
-import urllib.request
 from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
-from PySide6.QtWidgets import QApplication, QMessageBox, QProgressDialog
+from PySide6.QtWidgets import QMessageBox, QProgressDialog
 
 from .. import updater
 from ..log import logger
@@ -33,7 +30,7 @@ _consultas_activas: list[_HiloConsulta] = []
 
 
 def esperar_consultas(ms: int = 8000) -> None:
-    for hilo in list(_consultas_activas):
+    for hilo in list(_consultas_activas) + list(_descargas_activas):
         hilo.wait(ms)
 
 
@@ -42,45 +39,36 @@ class _HiloDescarga(QThread):
     terminado = Signal(str)
     fallo = Signal(str)
 
-    def __init__(self, url: str, url_sha256: str, destino: Path) -> None:
+    def __init__(self, act: updater.VersionRemota, destino: Path) -> None:
         super().__init__()
-        self._url = url
-        self._url_sha256 = url_sha256
+        self._act = act
         self._destino = destino
-
-    def _hash_esperado(self) -> str | None:
-        if not self._url_sha256:
-            return None
-        peticion = urllib.request.Request(
-            self._url_sha256, headers={"User-Agent": "AvisosEMarin"})
-        with urllib.request.urlopen(peticion, timeout=20) as resp:
-            texto = resp.read().decode("utf-8", "replace")
-        encontrado = re.search(r"\b([0-9a-fA-F]{64})\b", texto)
-        return encontrado.group(1).lower() if encontrado else None
 
     def run(self) -> None:
         try:
-            esperado = self._hash_esperado()
-            digestor = hashlib.sha256()
-            peticion = urllib.request.Request(self._url, headers={"User-Agent": "AvisosEMarin"})
-            with urllib.request.urlopen(peticion, timeout=20) as resp:
-                total = int(resp.headers.get("Content-Length", 0)) or 1
-                leido = 0
-                with open(self._destino, "wb") as f:
-                    while True:
-                        bloque = resp.read(65536)
-                        if not bloque:
-                            break
-                        f.write(bloque)
-                        digestor.update(bloque)
-                        leido += len(bloque)
-                        self.progreso.emit(int(leido * 100 / total))
-            if esperado and digestor.hexdigest() != esperado:
-                self._destino.unlink(missing_ok=True)
-                raise ValueError("La verificación de integridad SHA-256 no coincide")
-            self.terminado.emit(str(self._destino))
+            def notificar_progreso(valor: int) -> None:
+                if self.isInterruptionRequested():
+                    raise InterruptedError("Descarga cancelada")
+                self.progreso.emit(valor)
+
+            ruta = updater.preparar_instalacion(
+                self._act, destino=self._destino,
+                progreso=notificar_progreso,
+            )
+            self.terminado.emit(str(ruta))
         except Exception as e:
             self.fallo.emit(str(e))
+
+
+_descargas_activas: list[_HiloDescarga] = []
+
+
+def iniciar_instalador(ruta: str | Path) -> None:
+    subprocess.Popen(
+        [str(ruta), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/CLOSEAPPLICATIONS",
+         "/RESTARTAPPLICATIONS"],
+        close_fds=True,
+    )
 
 
 def comprobar_actualizaciones(parent, version_actual: str, silencioso: bool) -> None:
@@ -90,6 +78,8 @@ def comprobar_actualizaciones(parent, version_actual: str, silencioso: bool) -> 
     nada si ya esta actualizado o si falla la conexion. La consulta se
     hace en segundo plano: la interfaz sigue respondiendo mientras tanto.
     """
+    if hasattr(parent, "_actualizacion_estado"):
+        parent._actualizacion_estado(updater.ESTADO_COMPROBANDO)
     hilo = _HiloConsulta()
     _consultas_activas.append(hilo)
 
@@ -110,49 +100,75 @@ def _procesar_resultado(parent, version_actual: str, silencioso: bool, remota) -
             QMessageBox.warning(parent, "Buscar actualizaciones",
                                  "No se ha podido comprobar si hay una versión nueva.\n"
                                  "Revisa tu conexión a internet.")
+        if hasattr(parent, "_actualizacion_error"):
+            parent._actualizacion_error("No se pudo contactar con el canal de actualizaciones")
         return
     if not updater.hay_actualizacion(version_actual, remota):
+        if hasattr(parent, "_actualizacion_estado"):
+            parent._actualizacion_estado(updater.ESTADO_INACTIVA)
         if not silencioso:
             QMessageBox.information(parent, "Buscar actualizaciones",
                                      f"Ya tienes la última versión (v{version_actual}).")
         return
 
     logger.info("Actualizacion disponible: %s (instalada v%s)", remota.tag, version_actual)
-    resp = QMessageBox.question(
-        parent, "Actualización disponible",
-        f"Hay una versión nueva disponible: {remota.tag} (tienes v{version_actual}).\n\n"
-        "¿Descargarla e instalarla ahora? La aplicación se cerrará para completar la instalación.",
-        QMessageBox.Yes | QMessageBox.No)
-    if resp != QMessageBox.Yes:
-        return
+    if not silencioso:
+        resp = QMessageBox.question(
+            parent, "Actualización disponible",
+            f"Hay una versión nueva disponible: {remota.tag} (tienes v{version_actual}).\n\n"
+            "¿Descargarla y dejarla lista? Puedes instalarla ahora o al cerrar.",
+            QMessageBox.Yes | QMessageBox.No)
+        if resp != QMessageBox.Yes:
+            if hasattr(parent, "_actualizacion_estado"):
+                parent._actualizacion_estado(updater.ESTADO_INACTIVA)
+            return
 
-    destino = Path(tempfile.gettempdir()) / f"AvisosEMarin_Setup_{remota.tag}.exe"
-    progreso = QProgressDialog("Descargando actualización…", "Cancelar", 0, 100, parent)
-    progreso.setWindowTitle("Actualizando")
-    progreso.setMinimumDuration(0)
-    progreso.setAutoClose(False)
+    destino = Path(tempfile.gettempdir()) / "AvisosEMarin" / "updates"
+    progreso = None
+    if not silencioso:
+        progreso = QProgressDialog("Descargando actualización…", "Cancelar", 0, 100, parent)
+        progreso.setWindowTitle("Actualizando")
+        progreso.setMinimumDuration(0)
+        progreso.setAutoClose(False)
 
-    hilo = _HiloDescarga(remota.url_instalador, remota.url_sha256, destino)
-    hilo.progreso.connect(progreso.setValue)
+    if hasattr(parent, "_actualizacion_estado"):
+        parent._actualizacion_estado(updater.ESTADO_DESCARGANDO)
+    hilo = _HiloDescarga(remota, destino)
+    _descargas_activas.append(hilo)
+    if progreso is not None:
+        hilo.progreso.connect(progreso.setValue)
 
     def _al_terminar(ruta: str) -> None:
-        progreso.close()
-        try:
-            subprocess.Popen(
-                [ruta, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
-                close_fds=True,
-            )
-        except Exception as e:
-            QMessageBox.critical(parent, "Error", f"No se pudo iniciar el instalador:\n{e}")
-            return
-        QApplication.instance().quit()
+        if hilo in _descargas_activas:
+            _descargas_activas.remove(hilo)
+        if progreso is not None:
+            progreso.close()
+        if hasattr(parent, "_actualizacion_lista"):
+            parent._actualizacion_lista(ruta)
+        caja = QMessageBox(parent)
+        caja.setWindowTitle("Actualización lista")
+        caja.setText("La actualización está descargada y verificada. ¿Cuándo quieres instalarla?")
+        ahora = caja.addButton("Reiniciar ahora", QMessageBox.AcceptRole)
+        caja.addButton("Al cerrar", QMessageBox.ActionRole)
+        caja.exec()
+        if caja.clickedButton() is ahora and hasattr(parent, "_instalar_actualizacion_ahora"):
+            parent._instalar_actualizacion_ahora()
+        hilo.deleteLater()
 
     def _al_fallar(mensaje: str) -> None:
-        progreso.close()
+        if hilo in _descargas_activas:
+            _descargas_activas.remove(hilo)
+        if progreso is not None:
+            progreso.close()
+        if hasattr(parent, "_actualizacion_error"):
+            parent._actualizacion_error(mensaje)
         QMessageBox.critical(parent, "Error", f"No se pudo descargar la actualización:\n{mensaje}")
+        hilo.deleteLater()
 
     hilo.terminado.connect(_al_terminar)
     hilo.fallo.connect(_al_fallar)
-    progreso.canceled.connect(hilo.terminate)
+    if progreso is not None:
+        progreso.canceled.connect(hilo.requestInterruption)
     hilo.start()
-    progreso.exec()
+    if progreso is not None:
+        progreso.exec()

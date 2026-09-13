@@ -22,9 +22,10 @@ from . import extras as X
 from . import history as H
 from . import render as R
 from . import templates as T
+from . import updater as U
 from .draft import guardar_borrador, leer_borrador
 from .log import logger
-from .ui.actualizaciones import comprobar_actualizaciones
+from .ui.actualizaciones import comprobar_actualizaciones, iniciar_instalador
 from .ui.clientes import ClientesDialog, EditorClienteDialog
 from .ui.clientes import clave_orden_cliente
 from .ui.controles import ComboSinRueda, FechaSinRueda, SpinSinRueda
@@ -64,6 +65,9 @@ class MainWindow(QMainWindow):
         self._editor_plantillas: PlantillaEditorDialog | None = None
         self._editor_formato: FormatoDialog | None = None
         self._comprobacion_inicial_hecha = False
+        self._estado_actualizacion = U.ESTADO_INACTIVA
+        self._ruta_update_lista: str | None = None
+        self._instalar_al_cerrar = False
         self._restaurando_borrador = False
         self._undo_cliente: dict | None = None
         self._extra_buttons: dict[str, QToolButton] = {}
@@ -75,6 +79,10 @@ class MainWindow(QMainWindow):
         self._timer_borrador.setSingleShot(True)
         self._timer_borrador.setInterval(300)
         self._timer_borrador.timeout.connect(self._guardar_borrador_ahora)
+        self._timer_actualizaciones = QTimer(self)
+        self._timer_actualizaciones.setInterval(6 * 60 * 60 * 1000)
+        self._timer_actualizaciones.timeout.connect(self._comprobar_actualizacion_periodica)
+        self._timer_actualizaciones.start()
         self._aplicar_periodo_sugerido()
         self._cargar_ajustes()
         self._refrescar_completer_clientes()
@@ -533,7 +541,7 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
         if not self._comprobacion_inicial_hecha:
             self._comprobacion_inicial_hecha = True
-            QTimer.singleShot(3000, lambda: comprobar_actualizaciones(self, __version__, silencioso=True))
+            QTimer.singleShot(3000, self._comprobar_actualizacion_periodica)
 
     # --------------------------------------------------------------- estado
     def _plantillas_ordenadas(self) -> list[T.Plantilla]:
@@ -1317,6 +1325,38 @@ class MainWindow(QMainWindow):
     def _buscar_actualizaciones_manual(self) -> None:
         comprobar_actualizaciones(self, __version__, silencioso=False)
 
+    def _comprobar_actualizacion_periodica(self) -> None:
+        if self._estado_actualizacion in (U.ESTADO_COMPROBANDO, U.ESTADO_DESCARGANDO):
+            return
+        comprobar_actualizaciones(self, __version__, silencioso=True)
+
+    def _actualizacion_estado(self, estado: str) -> None:
+        self._estado_actualizacion = estado
+
+    def _actualizacion_lista(self, ruta: str) -> None:
+        self._guardar_borrador_ahora()
+        self._ruta_update_lista = ruta
+        self._instalar_al_cerrar = True
+        self._estado_actualizacion = U.ESTADO_LISTA
+        self._set_estado("Actualización lista · se instalará al cerrar")
+
+    def _actualizacion_error(self, mensaje: str) -> None:
+        self._estado_actualizacion = U.ESTADO_ERROR
+        logger.info("Actualización pendiente de reintento: %s", mensaje)
+
+    def _instalar_actualizacion_ahora(self) -> None:
+        if not self._ruta_update_lista:
+            return
+        self._guardar_borrador_ahora()
+        try:
+            iniciar_instalador(self._ruta_update_lista)
+        except Exception as exc:
+            self._actualizacion_error(str(exc))
+            QMessageBox.critical(self, "Error", f"No se pudo iniciar el instalador:\n{exc}")
+            return
+        self._instalar_al_cerrar = False
+        QApplication.instance().quit()
+
     def _abrir_carpeta_datos(self) -> None:
         """Abre la carpeta donde se guardan clientes, historial, plantillas
         personalizadas y ajustes — util para hacer copias de seguridad."""
@@ -1381,4 +1421,10 @@ class MainWindow(QMainWindow):
             geometria=bytes(self.saveGeometry().toHex()).decode("ascii"),
             splitter=self.splitter.sizes(),
         )
+        if self._instalar_al_cerrar and self._ruta_update_lista:
+            try:
+                iniciar_instalador(self._ruta_update_lista)
+                self._instalar_al_cerrar = False
+            except Exception:
+                logger.exception("No se pudo iniciar la actualización preparada al cerrar")
         super().closeEvent(event)
