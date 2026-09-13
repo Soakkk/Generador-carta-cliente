@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 
 import pytest
 from PySide6.QtWidgets import QApplication
@@ -12,6 +13,7 @@ from avisos.updater import (
     ESTADO_ERROR,
     ESTADO_LISTA,
     VersionRemota,
+    comprobar,
     preparar_instalacion,
 )
 
@@ -59,6 +61,27 @@ def test_preparar_instalacion_elimina_descarga_si_sha_no_coincide(tmp_path):
     with pytest.raises(ValueError, match="SHA-256"):
         preparar_instalacion(_version_local(origen, sha), destino=tmp_path / "descargas")
     assert not (tmp_path / "descargas" / "AvisosEMarin_Setup_v2.0.0.exe").exists()
+
+
+def test_release_asocia_el_hash_al_exe_seleccionado(monkeypatch):
+    class Respuesta:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def read(self):
+            return json.dumps({
+                "tag_name": "v2.0.0",
+                "assets": [
+                    {"name": "AvisosEMarin_Setup_2.0.0.exe", "browser_download_url": "setup.exe"},
+                    {"name": "AvisosEMarin_Setup_2.0.0.exe.sha256", "browser_download_url": "setup.sha"},
+                    {"name": "AvisosEMarin_portable.zip.sha256", "browser_download_url": "zip.sha"},
+                ],
+            }).encode()
+
+    monkeypatch.setattr("avisos.updater.urllib.request.urlopen", lambda *_a, **_k: Respuesta())
+    remota = comprobar()
+    assert remota is not None
+    assert remota.url_instalador == "setup.exe"
+    assert remota.url_sha256 == "setup.sha"
 
 
 def test_actualizacion_lista_guarda_sesion_y_reintento_periodico(
@@ -110,4 +133,3 @@ def test_release_sincroniza_version_y_genera_hash(tmp_path):
     assert checksum.read_text("ascii") == (
         f"{hashlib.sha256(b'release').hexdigest()}  {artefacto.name}\n"
     )
-

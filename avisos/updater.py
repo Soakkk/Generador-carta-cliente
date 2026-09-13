@@ -56,13 +56,19 @@ def comprobar() -> VersionRemota | None:
 
     tag = datos.get("tag_name", "")
     instalador = ""
-    sha256 = ""
-    for asset in datos.get("assets", []):
+    nombre_instalador = ""
+    assets = datos.get("assets", [])
+    for asset in assets:
         nombre = asset.get("name", "")
         if nombre.lower().endswith(".exe") and "setup" in nombre.lower():
             instalador = asset.get("browser_download_url", "")
-        elif nombre.lower().endswith(".sha256"):
+            nombre_instalador = nombre
+    sha256 = ""
+    esperado = f"{nombre_instalador}.sha256".casefold()
+    for asset in assets:
+        if str(asset.get("name", "")).casefold() == esperado:
             sha256 = asset.get("browser_download_url", "")
+            break
     if not tag or not instalador:
         return None
     return VersionRemota(
