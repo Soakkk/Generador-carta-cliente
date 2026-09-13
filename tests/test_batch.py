@@ -102,3 +102,51 @@ def test_estado_serializa_configuracion_de_serie_y_escribe_atomicamente(tmp_path
     assert restaurado.modo_salida == "pdf"
     assert restaurado.configuracion == {"plantilla_id": "recordatorio", "periodo": "2T"}
     assert not (tmp_path / "lote-avisos.json.tmp").exists()
+
+
+def test_dialogo_reanuda_con_todo_el_contexto_persistido(monkeypatch, tmp_path):
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+    from PySide6.QtWidgets import QApplication
+    from avisos.templates import Contexto, PLANTILLAS
+    from avisos.ui.lote import LoteDialog
+
+    app = QApplication.instance() or QApplication([])
+    destino = tmp_path / "pdf"
+    destino.mkdir()
+    guardado = BatchState(
+        items=[BatchItem(id="1", cliente_nif="", nombre="Uno")],
+        carpeta=str(destino),
+        configuracion={
+            "plantilla_id": PLANTILLAS[0].id,
+            "periodo": "1T",
+            "anio": 2025,
+            "documentos": ["Documento anterior"],
+            "documentos_extra": [["Bloque", ["Extra anterior"]]],
+            "fecha_limite": "2025-04-15",
+            "navidad": True,
+            "notas": "Nota anterior",
+            "extras": ["Etiqueta anterior"],
+            "titulo_tpl": "Título anterior {anio}",
+            "cuerpo_tpl": "Cuerpo anterior {documentos}",
+        },
+    )
+    guardar_lote(guardado)
+
+    dialogo = LoteDialog(
+        None,
+        Contexto(periodo="2T", anio=2026, documentos=["Documento nuevo"]),
+        PLANTILLAS[0],
+        str(destino),
+        documento_tpl=("Título nuevo", "Cuerpo nuevo"),
+        extras_etiquetas=["Etiqueta nueva"],
+    )
+
+    assert dialogo._ctx_base.periodo == "1T"
+    assert dialogo._ctx_base.anio == 2025
+    assert dialogo._ctx_base.documentos == ["Documento anterior"]
+    assert dialogo._ctx_base.notas == "Nota anterior"
+    assert dialogo._documento_tpl == ("Título anterior {anio}", "Cuerpo anterior {documentos}")
+    assert dialogo._extras_etiquetas == ["Etiqueta anterior"]
+    dialogo.deleteLater()
+    app.processEvents()

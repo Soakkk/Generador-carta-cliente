@@ -4,6 +4,7 @@ clientes de golpe: una copia individual del PDF por cada nombre elegido.
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl
@@ -43,7 +44,7 @@ class LoteDialog(QDialog):
 
         info = QLabel(
             f"Se generará un PDF individual por cada cliente marcado, usando:\n"
-            f"«{plantilla.nombre}» — {ctx_base.periodo_largo} de {ctx_base.anio}")
+            f"«{plantilla.nombre}» — {self._ctx_base.periodo_largo} de {self._ctx_base.anio}")
         info.setWordWrap(True)
 
         self.txt_buscar = QLineEdit()
@@ -182,6 +183,14 @@ class LoteDialog(QDialog):
             "periodo": self._ctx_base.periodo,
             "anio": self._ctx_base.anio,
             "documentos": list(self._ctx_base.documentos),
+            "documentos_extra": [
+                [intro, list(lineas)] for intro, lineas in self._ctx_base.documentos_extra
+            ],
+            "fecha_limite": (
+                self._ctx_base.fecha_limite.isoformat() if self._ctx_base.fecha_limite else ""
+            ),
+            "navidad": self._ctx_base.navidad,
+            "notas": self._ctx_base.notas,
             "extras": list(self._extras_etiquetas),
             "titulo_tpl": self._documento_tpl[0],
             "cuerpo_tpl": self._documento_tpl[1],
@@ -193,6 +202,36 @@ class LoteDialog(QDialog):
             return None
         if lote.configuracion.get("plantilla_id") != self._plantilla.id:
             return None
+        cfg = lote.configuracion
+        try:
+            periodo = str(cfg["periodo"])
+            anio = int(cfg["anio"])
+            documentos = list(cfg["documentos"])
+            titulo = str(cfg["titulo_tpl"])
+            cuerpo = str(cfg["cuerpo_tpl"])
+            extras = list(cfg.get("extras", []))
+            documentos_extra = [
+                (str(intro), [str(linea) for linea in lineas])
+                for intro, lineas in cfg.get("documentos_extra", [])
+            ]
+            fecha_txt = str(cfg.get("fecha_limite", ""))
+            fecha_limite = date.fromisoformat(fecha_txt) if fecha_txt else None
+            if periodo not in T.PERIODOS or not all(isinstance(d, str) for d in documentos):
+                return None
+        except (KeyError, TypeError, ValueError):
+            return None
+        self._ctx_base = replace(
+            self._ctx_base,
+            periodo=periodo,
+            anio=anio,
+            documentos=documentos,
+            documentos_extra=documentos_extra,
+            fecha_limite=fecha_limite,
+            navidad=bool(cfg.get("navidad", False)),
+            notas=str(cfg.get("notas", "")),
+        )
+        self._documento_tpl = (titulo, cuerpo)
+        self._extras_etiquetas = [str(extra) for extra in extras]
         return lote
 
     def _iniciar_lote(self, nombres: list[str]) -> None:
