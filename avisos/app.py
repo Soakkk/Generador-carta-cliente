@@ -1354,10 +1354,15 @@ class MainWindow(QMainWindow):
             self._regenerar_editor()
 
     def _buscar_actualizaciones_manual(self) -> None:
+        if self._estado_actualizacion == U.ESTADO_LISTA and self._ruta_update_lista:
+            self._set_estado("Actualización lista · se instalará al cerrar")
+            return
         comprobar_actualizaciones(self, __version__, silencioso=False)
 
     def _comprobar_actualizacion_periodica(self) -> None:
-        if self._estado_actualizacion in (U.ESTADO_COMPROBANDO, U.ESTADO_DESCARGANDO):
+        if self._estado_actualizacion in (
+            U.ESTADO_COMPROBANDO, U.ESTADO_DESCARGANDO, U.ESTADO_LISTA
+        ):
             return
         comprobar_actualizaciones(self, __version__, silencioso=True)
 
@@ -1372,6 +1377,9 @@ class MainWindow(QMainWindow):
         self._set_estado("Actualización lista · se instalará al cerrar")
 
     def _actualizacion_error(self, mensaje: str) -> None:
+        if self._estado_actualizacion == U.ESTADO_LISTA and self._ruta_update_lista:
+            logger.info("Se conserva la actualización ya preparada: %s", mensaje)
+            return
         self._estado_actualizacion = U.ESTADO_ERROR
         logger.info("Actualización pendiente de reintento: %s", mensaje)
 

@@ -84,6 +84,41 @@ def test_release_asocia_el_hash_al_exe_seleccionado(monkeypatch):
     assert remota.url_sha256 == "setup.sha"
 
 
+def test_reintento_fallido_conserva_instalador_verificado(monkeypatch, tmp_path):
+    origen = tmp_path / "origen.exe"
+    bueno = b"instalador bueno"
+    origen.write_bytes(bueno)
+    sha = tmp_path / "origen.exe.sha256"
+    sha.write_text(f"{hashlib.sha256(bueno).hexdigest()}  origen.exe\n", "ascii")
+    version = _version_local(origen, sha)
+    carpeta = tmp_path / "descargas"
+    listo = preparar_instalacion(version, destino=carpeta)
+
+    origen.write_bytes(b"descarga corrupta")
+    sha.write_text(f"{'0' * 64}  origen.exe\n", "ascii")
+    with pytest.raises(ValueError, match="SHA-256"):
+        preparar_instalacion(version, destino=carpeta)
+
+    assert listo.read_bytes() == bueno
+    assert not list(carpeta.glob("*.part"))
+
+
+def test_reutiliza_instalador_ya_verificado_sin_redescargar(monkeypatch, tmp_path):
+    origen = tmp_path / "origen.exe"
+    contenido = b"instalador listo"
+    origen.write_bytes(contenido)
+    sha = tmp_path / "origen.exe.sha256"
+    sha.write_text(f"{hashlib.sha256(contenido).hexdigest()}  origen.exe\n", "ascii")
+    version = _version_local(origen, sha)
+    carpeta = tmp_path / "descargas"
+    listo = preparar_instalacion(version, destino=carpeta)
+    origen.unlink()
+
+    reutilizado = preparar_instalacion(version, destino=carpeta)
+    assert reutilizado == listo
+    assert reutilizado.read_bytes() == contenido
+
+
 def test_actualizacion_lista_guarda_sesion_y_reintento_periodico(
     monkeypatch, tmp_path, qapp
 ):
@@ -105,8 +140,25 @@ def test_actualizacion_lista_guarda_sesion_y_reintento_periodico(
     assert win._timer_actualizaciones.isActive()
 
     win._actualizacion_error("sin red")
-    assert win._estado_actualizacion == ESTADO_ERROR
+    assert win._estado_actualizacion == ESTADO_LISTA
     assert win._timer_actualizaciones.isActive()
+    win.deleteLater()
+
+
+def test_estado_listo_bloquea_nuevas_comprobaciones(monkeypatch, tmp_path, qapp):
+    win = MainWindow()
+    ruta = tmp_path / "actualizacion.exe"
+    ruta.write_bytes(b"lista")
+    win._actualizacion_lista(str(ruta))
+    llamadas: list[bool] = []
+    monkeypatch.setattr(
+        "avisos.app.comprobar_actualizaciones",
+        lambda *_a, **kw: llamadas.append(bool(kw.get("silencioso"))),
+    )
+    win._comprobar_actualizacion_periodica()
+    win._buscar_actualizaciones_manual()
+    assert llamadas == []
+    assert win._estado_actualizacion == ESTADO_LISTA
     win.deleteLater()
 
 

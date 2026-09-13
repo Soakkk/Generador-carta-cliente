@@ -105,7 +105,15 @@ def preparar_instalacion(
     etiqueta = re.sub(r"[^0-9A-Za-z._-]+", "_", act.tag).strip("._") or "actualizacion"
     ruta = base if base.suffix.lower() == ".exe" else base / f"AvisosEMarin_Setup_{etiqueta}.exe"
     ruta.parent.mkdir(parents=True, exist_ok=True)
-    temporal = ruta.with_suffix(ruta.suffix + ".part")
+    if ruta.exists() and hashlib.sha256(ruta.read_bytes()).hexdigest() == esperado:
+        if progreso:
+            progreso(100)
+        return ruta
+    descriptor, nombre_temporal = tempfile.mkstemp(
+        prefix=f"{ruta.name}.", suffix=".part", dir=ruta.parent
+    )
+    os.close(descriptor)
+    temporal = Path(nombre_temporal)
     digestor = hashlib.sha256()
     peticion = urllib.request.Request(act.url_instalador, headers={"User-Agent": "AvisosEMarin"})
     try:
@@ -130,5 +138,4 @@ def preparar_instalacion(
         return ruta
     except Exception:
         temporal.unlink(missing_ok=True)
-        ruta.unlink(missing_ok=True)
         raise
