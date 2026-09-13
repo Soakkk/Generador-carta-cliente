@@ -7,6 +7,7 @@ destinatarios en la generacion en lote.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, fields
+import time
 from pathlib import Path
 from typing import Any
 
@@ -74,7 +75,10 @@ def guardar(clientes: list[Cliente]) -> None:
     for cliente in ordenados:
         if normalizar_nif(cliente.nif):
             try:
-                fusionar_cliente(asdict(cliente), origen="AvisosEMarin")
+                fusionar_cliente(
+                    asdict(cliente), origen="AvisosEMarin",
+                    resolver={"favorito": "entrante", "ultimo_uso": "entrante"},
+                )
             except Exception:
                 # La base histórica local sigue siendo plenamente funcional
                 # si el directorio compartido no está disponible.
@@ -97,22 +101,37 @@ def eliminar(clientes: list[Cliente], nombre: str) -> list[Cliente]:
 
 def buscar(clientes: list[Cliente], nombre: str) -> Cliente | None:
     clave = nombre.strip().lower()
+    nif = normalizar_nif(nombre)
     for c in clientes:
-        if c.nombre.strip().lower() == clave:
+        if c.nombre.strip().lower() == clave or (nif and normalizar_nif(c.nif) == nif):
             return c
     return None
 
 
-def asegurar_cliente(nombre: str) -> bool:
-    """Si `nombre` no esta ya en la base de datos, lo anade (solo el
-    nombre; el resto de campos se pueden completar luego desde «Clientes»).
+def registrar_uso(nombre_o_nif: str) -> None:
+    clientes = cargar()
+    encontrado = buscar(clientes, nombre_o_nif)
+    if encontrado is None:
+        return
+    encontrado.ultimo_uso = time.time()
+    guardar(clientes)
+
+
+def asegurar_cliente(nombre: str, nif: str = "") -> bool:
+    """Si `nombre` no está ya en la base de datos, lo añade con su NIF.
+
+    El resto de campos se puede completar luego desde «Clientes».
     Devuelve True si se ha anadido un cliente nuevo."""
     nombre = nombre.strip()
     if not nombre:
         return False
     clientes = cargar()
-    if buscar(clientes, nombre):
+    existente = buscar(clientes, nombre)
+    if existente:
+        if nif.strip() and not existente.nif.strip():
+            existente.nif = nif.strip()
+            guardar(clientes)
         return False
-    clientes.append(Cliente(nombre=nombre))
+    clientes.append(Cliente(nombre=nombre, nif=nif.strip()))
     guardar(clientes)
     return True

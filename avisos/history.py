@@ -43,6 +43,22 @@ def cargar() -> list[Entrada]:
     return entradas
 
 
+def clientes_recientes(limite: int = 8) -> list[str]:
+    """Nombres únicos usados más recientemente, del más nuevo al más viejo."""
+    vistos: set[str] = set()
+    resultado: list[str] = []
+    for entrada in reversed(cargar()):
+        nombre = entrada.cliente.strip()
+        clave = nombre.casefold()
+        if not nombre or nombre == "(genérico)" or clave in vistos:
+            continue
+        vistos.add(clave)
+        resultado.append(nombre)
+        if len(resultado) >= max(0, limite):
+            break
+    return resultado
+
+
 def registrar(plantilla: str, periodo: str, anio: int, cliente: str, ruta: str,
               *, plantilla_id: str = "", documentos: list[str] | None = None,
               extras: list[str] | None = None, navidad: bool = False,
