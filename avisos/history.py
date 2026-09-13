@@ -31,8 +31,32 @@ def _ruta() -> Path:
     return config.config_dir() / "historial.json"
 
 
+def _entrada_valida(dato: object) -> bool:
+    if not isinstance(dato, dict):
+        return False
+    textos_obligatorios = ("fecha_hora", "plantilla", "periodo", "cliente", "ruta")
+    if not all(isinstance(dato.get(campo), str) for campo in textos_obligatorios):
+        return False
+    if not isinstance(dato.get("anio"), int) or isinstance(dato.get("anio"), bool):
+        return False
+    for campo in ("plantilla_id", "notas", "titulo_tpl", "cuerpo_tpl"):
+        if campo in dato and not isinstance(dato[campo], str):
+            return False
+    for campo in ("documentos", "extras"):
+        if campo in dato and (
+            not isinstance(dato[campo], list)
+            or not all(isinstance(valor, str) for valor in dato[campo])
+        ):
+            return False
+    return "navidad" not in dato or isinstance(dato["navidad"], bool)
+
+
+def _historial_valido(datos: object) -> bool:
+    return isinstance(datos, list) and all(_entrada_valida(dato) for dato in datos)
+
+
 def cargar() -> list[Entrada]:
-    datos = config.leer_json(_ruta(), [], copias=3, validar=lambda valor: isinstance(valor, list))
+    datos = config.leer_json(_ruta(), [], copias=3, validar=_historial_valido)
     permitidas = {f.name for f in fields(Entrada)}
     entradas: list[Entrada] = []
     for dato in datos if isinstance(datos, list) else []:

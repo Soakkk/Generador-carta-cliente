@@ -342,11 +342,23 @@ def _overrides_path() -> Path:
     return config.config_dir() / "plantillas_personalizadas.json"
 
 
+def _overrides_validos(datos: object) -> bool:
+    if not isinstance(datos, dict):
+        return False
+    return all(
+        isinstance(plantilla_id, str)
+        and isinstance(contenido, dict)
+        and isinstance(contenido.get("titulo"), str)
+        and isinstance(contenido.get("cuerpo"), str)
+        for plantilla_id, contenido in datos.items()
+    )
+
+
 def _overrides() -> dict[str, dict[str, str]]:
     global _overrides_cache
     if _overrides_cache is None:
         datos = config.leer_json(
-            _overrides_path(), {}, copias=3, validar=lambda valor: isinstance(valor, dict)
+            _overrides_path(), {}, copias=3, validar=_overrides_validos
         )
         _overrides_cache = datos if isinstance(datos, dict) else {}
     return _overrides_cache

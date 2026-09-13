@@ -180,6 +180,34 @@ def test_plantillas_corruptas_se_recuperan_de_copia_validada(entorno, monkeypatc
     assert ruta.with_suffix(".json.bak1").exists()
 
 
+def test_historial_json_semanticamente_invalido_usa_backup(entorno):
+    """Un JSON parseable con entradas incompletas no debe ocultar una copia sana."""
+    history.registrar("Aviso válido", "1T", 2026, "Uno", "uno.pdf")
+    history.registrar("Aviso posterior", "1T", 2026, "Dos", "dos.pdf")
+    ruta = history._ruta()
+    ruta.write_text('[{"plantilla": [], "anio": "dos mil"}]', "utf-8")
+
+    recuperado = history.cargar()
+
+    assert [entrada.plantilla for entrada in recuperado] == ["Aviso válido"]
+
+
+def test_plantillas_json_semanticamente_invalidas_usan_backup(entorno, monkeypatch):
+    """Un override parseable con campos no textuales no debe ganar al backup válido."""
+    plantilla = templates.PLANTILLAS[0]
+    monkeypatch.setattr(templates, "_overrides_cache", {})
+    templates.guardar_override(plantilla.id, "Título válido", "Cuerpo válido")
+    templates.guardar_override(plantilla.id, "Título posterior", "Cuerpo posterior")
+    ruta = templates._overrides_path()
+    ruta.write_text(
+        '{"solicitud_trim": {"titulo": ["no es texto"], "cuerpo": 7}}', "utf-8"
+    )
+    monkeypatch.setattr(templates, "_overrides_cache", None)
+
+    assert templates.titulo_tpl_activo(plantilla) == "Título válido"
+    assert templates.cuerpo_tpl_activo(plantilla) == "Cuerpo válido"
+
+
 def test_eliminacion_de_documento_se_puede_deshacer(entorno, qapp):
     win = MainWindow()
     win._set_docs(["Primero", "Segundo", "Tercero"])
