@@ -61,3 +61,10 @@
 - [x] Deshacer limitado de la última eliminación de documento, conservando posición y texto (`e429e14`).
 
 Evidencia TDD: cada reproducción nueva falló antes de su corrección y pasó después; las pruebas focales quedaron incorporadas sin reducir las existentes. Verificación posterior en `e429e14`: `scripts/test_full.py` → `TODO OK` (97 comprobaciones); pytest offscreen → 45 passed; `compileall` → exit 0; `git diff --check` del rango → exit 0; contratos de salida → 5 passed. No se modificaron `render.py`, `estilo.py`, `extras.py`, el logo documental, el cuerpo ZIP ni el workflow de release. No se ejecutó detector Impeccable de nuevo porque el ledger ya registraba su única ejecución.
+
+## Corrección focal posterior a la re-revisión
+
+- [x] Un lote sin elementos pendientes ni fallidos ya no se carga ni restaura su contexto sobre una serie nueva (`0a2ab7c`). RED: el diálogo restauraba periodo, ejercicio, documentos y texto del lote completado. GREEN: los 8 tests de lote pasan y un lote pendiente sigue recuperando su contexto exacto.
+- [x] Historial y plantillas validan estructura interna, tipos de entradas y campos antes de aceptar el JSON principal (`731460d`). RED: un JSON parseable pero semánticamente inválido ganaba a una copia sana. GREEN: se descarta esa versión y se recupera el backup íntegro.
+
+Verificación posterior a estas correcciones: `scripts/test_full.py` → `TODO OK` (97 comprobaciones); pytest offscreen → 48 passed; contratos de salida → 5 passed; `compileall` → exit 0; `git diff --check aebe13f..HEAD` → exit 0. Los archivos de render, estilo, extras, logo documental, release y workflow permanecen sin cambios respecto al cierre anterior.

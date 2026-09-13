@@ -6,7 +6,7 @@ Base: `e1f9f87` (`v1.10.0`)
 
 ## Estado
 
-Las siete tareas del plan `docs/superpowers/plans/2026-09-13-suite-oficina-unificada.md` y la única ronda de corrección de los nueve hallazgos finales están implementadas y verificadas. La rama queda conservada sin merge, push, PR, release ni publicación.
+Las siete tareas del plan `docs/superpowers/plans/2026-09-13-suite-oficina-unificada.md`, la ronda de corrección de los nueve hallazgos finales y los dos hallazgos Important de la re-revisión están implementados y verificados. La rama queda conservada sin merge, push, PR, release ni publicación.
 
 Se mantuvieron intactos los contratos de plantillas, HTML resuelto, carta, logo documental, paginación y raster/PDF. Los únicos recursos gráficos sustituidos son el icono de la aplicación pedido por la Task 6 (`assets/app-icon.png` y `assets/app.ico`), con `assets/app-icon.svg` como fuente reproducible.
 
@@ -27,6 +27,8 @@ Se mantuvieron intactos los contratos de plantillas, HTML resuelto, carta, logo 
 - `9bdb5cc` — `fix: mostrar y resolver conflictos de clientes`
 - `2244e2b` — `fix: recuperar historial y plantillas desde copias`
 - `e429e14` — `fix: permitir deshacer documentos eliminados`
+- `0a2ab7c` — `fix: ignorar lotes ya completados al crear series`
+- `731460d` — `fix: validar backups antes de recuperar datos`
 
 ## Resultado funcional
 
@@ -42,11 +44,13 @@ Se mantuvieron intactos los contratos de plantillas, HTML resuelto, carta, logo 
 - Lotes reanudados con su contexto completo y fases persistentes que evitan duplicar PDF/historial.
 - Actualizador ligado al hash del EXE, con instalador listo preservado y descargas temporales exclusivas.
 - Conflictos de clientes resolubles en pantalla, recuperación desde copias rotativas y deshacer de documentos.
+- Los lotes completados no contaminan series nuevas; solo una cola pendiente o fallida restaura su contexto.
+- Historial y plantillas eligen una copia únicamente después de validar la estructura y tipos internos.
 
 ## Evidencia
 
 - `.venv/bin/python scripts/test_full.py` → `TODO OK` (97 comprobaciones).
-- `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q` → `45 passed in 1.49s`.
+- `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q` → `48 passed in 1.38s`.
 - `.venv/bin/python -m compileall -q avisos` → exit 0.
 - `git diff --check` → exit 0.
 - Detector visual Impeccable sobre `avisos/tema_ui.py avisos/app.py avisos/ui` → `[]`.
