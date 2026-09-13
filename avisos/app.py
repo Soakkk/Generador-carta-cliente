@@ -106,6 +106,7 @@ class MainWindow(QMainWindow):
         menu.addAction("Formato del documento…", self._abrir_formato)
         menu.addAction("Documentación opcional…", self._abrir_extras)
         menu.addSeparator()
+        menu.addAction("Elegir carpeta de PDF…", self._elegir_carpeta_destino)
         menu.addAction("Abrir carpeta de datos…", self._abrir_carpeta_datos)
 
         ayuda = self.menuBar().addMenu("Ayuda")
@@ -120,15 +121,15 @@ class MainWindow(QMainWindow):
         raiz.setContentsMargins(0, 0, 0, 0)
         raiz.setSpacing(0)
 
-        cabecera = QFrame()
-        cabecera.setObjectName("cabecera")
-        cabecera.setFixedHeight(64)
-        lc = QHBoxLayout(cabecera)
-        lc.setContentsMargins(22, 10, 22, 10)
+        self.cabecera = QFrame()
+        self.cabecera.setObjectName("cabecera")
+        self.cabecera.setFixedHeight(56)
+        lc = QHBoxLayout(self.cabecera)
+        lc.setContentsMargins(18, 8, 18, 8)
         logo = QLabel()
         logo.setPixmap(QPixmap(str(config.asset("app-icon.png"))).scaled(
-            42, 42, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        logo.setFixedSize(46, 46)
+            36, 36, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setFixedSize(40, 40)
         lc.addWidget(logo)
         marca = QVBoxLayout()
         titulo = QLabel("Avisos Asesoría E. Marín")
@@ -139,6 +140,7 @@ class MainWindow(QMainWindow):
         marca.addWidget(subtitulo)
         lc.addLayout(marca)
         lc.addStretch()
+        self._acciones_cabecera = []
         for texto, slot in (("Clientes", self._abrir_clientes),
                             ("Historial", self._abrir_historial),
                             ("Varios clientes", self._abrir_lote)):
@@ -146,7 +148,8 @@ class MainWindow(QMainWindow):
             boton.setObjectName("cabeceraAccion")
             boton.clicked.connect(slot)
             lc.addWidget(boton)
-        raiz.addWidget(cabecera)
+            self._acciones_cabecera.append(boton)
+        raiz.addWidget(self.cabecera)
 
         contenido = QWidget()
         cuerpo = QVBoxLayout(contenido)
@@ -170,6 +173,8 @@ class MainWindow(QMainWindow):
         self._timer.setSingleShot(True)
         self._timer.setInterval(250)
         self._timer.timeout.connect(self._actualizar_preview)
+        self._modo_compacto = False
+        self._aplicar_modo_compacto(self.width())
 
     def _construir_barra_acciones(self) -> QWidget:
         barra = QFrame()
@@ -186,6 +191,8 @@ class MainWindow(QMainWindow):
         self.btn_copiar = QPushButton("Copiar texto")
         self.btn_copiar.setObjectName("primario")
         self.btn_copiar.setMinimumHeight(40)
+        self.btn_copiar.setShortcut("Ctrl+Return")
+        self.btn_copiar.setToolTip("Copiar el texto para WhatsApp o correo (Ctrl+Entrar)")
         self.btn_copiar.clicked.connect(self._copiar_texto)
         fila.addWidget(self.btn_copiar)
 
@@ -199,15 +206,15 @@ class MainWindow(QMainWindow):
         self.btn_siguiente.clicked.connect(lambda: self._guardar_y_siguiente(abrir=False))
         fila.addWidget(self.btn_siguiente)
 
-        btn_generar_abrir = QPushButton("Guardar y abrir")
-        btn_generar_abrir.clicked.connect(lambda: self._guardar_pdf(abrir=True))
-        fila.addWidget(btn_generar_abrir)
+        self.btn_guardar_abrir = QPushButton("Guardar y abrir")
+        self.btn_guardar_abrir.clicked.connect(lambda: self._guardar_pdf(abrir=True))
+        fila.addWidget(self.btn_guardar_abrir)
 
-        btn_destino = QToolButton()
-        btn_destino.setText("Carpeta de PDF…")
-        btn_destino.setToolTip("Cambiar dónde se guardan los PDF")
-        btn_destino.clicked.connect(self._elegir_carpeta_destino)
-        fila.addWidget(btn_destino)
+        self.btn_carpeta = QToolButton()
+        self.btn_carpeta.setText("Carpeta de PDF…")
+        self.btn_carpeta.setToolTip("Cambiar dónde se guardan los PDF")
+        self.btn_carpeta.clicked.connect(self._elegir_carpeta_destino)
+        fila.addWidget(self.btn_carpeta)
 
         self.lbl_destino = QLabel("")
         self.lbl_destino.setObjectName("rutaDestino")
@@ -217,7 +224,8 @@ class MainWindow(QMainWindow):
 
     def _construir_formulario(self) -> QWidget:
         panel = QWidget()
-        panel.setObjectName("tarjeta")
+        panel.setObjectName("panelFormulario")
+        self.panel_formulario = panel
         panel.setMinimumWidth(300)
         form_scroll = QScrollArea()
         form_scroll.setWidgetResizable(True)
@@ -408,7 +416,8 @@ class MainWindow(QMainWindow):
 
     def _construir_editor(self) -> QWidget:
         contenedor = QWidget()
-        contenedor.setObjectName("tarjeta")
+        contenedor.setObjectName("panelDocumento")
+        self.panel_documento = contenedor
         lay = QVBoxLayout(contenedor)
         lay.setContentsMargins(14, 14, 14, 14)
 
@@ -524,18 +533,40 @@ class MainWindow(QMainWindow):
         boton("≡", "Centrar", lambda: self.editor.setAlignment(Qt.AlignHCenter))
         barra.addStretch(1)
 
-        btn_guardar_def = QPushButton("Guardar como predeterminado")
-        btn_guardar_def.setToolTip("Convierte este texto en el texto base para todos los "
-                                   "futuros avisos de este tipo (los datos se seguirán "
-                                   "rellenando solos)")
-        btn_guardar_def.clicked.connect(self._guardar_como_predeterminado)
-        barra.addWidget(btn_guardar_def)
+        self.btn_guardar_def = QPushButton("Guardar como predeterminado")
+        self.btn_guardar_def.setToolTip(
+            "Convierte este texto en el texto base para todos los futuros avisos "
+            "de este tipo (los datos se seguirán rellenando solos)")
+        self.btn_guardar_def.clicked.connect(self._guardar_como_predeterminado)
+        barra.addWidget(self.btn_guardar_def)
 
-        btn_restaurar = QPushButton("Restaurar texto de la plantilla")
-        btn_restaurar.setToolTip("Vuelve al texto predefinido con los datos actuales del formulario")
-        btn_restaurar.clicked.connect(self._restaurar_texto)
-        barra.addWidget(btn_restaurar)
+        self.btn_restaurar = QPushButton("Restaurar texto de la plantilla")
+        self.btn_restaurar.setToolTip(
+            "Vuelve al texto predefinido con los datos actuales del formulario")
+        self.btn_restaurar.clicked.connect(self._restaurar_texto)
+        barra.addWidget(self.btn_restaurar)
         return barra
+
+    def _aplicar_modo_compacto(self, ancho: int) -> None:
+        """Ajusta accesos redundantes y etiquetas sin retirar acciones esenciales."""
+        if not hasattr(self, "btn_copiar"):
+            return
+        compacto = ancho < 1180
+        self._modo_compacto = compacto
+        self.btn_carpeta.setVisible(not compacto)
+        for boton in self._acciones_cabecera:
+            boton.setVisible(not compacto)
+        self.btn_pdf.setText("Guardar PDF" if compacto else "Guardar PDF…")
+        self.btn_siguiente.setText(
+            "Guardar y siguiente" if compacto else "Guardar y siguiente cliente")
+        self.btn_guardar_def.setText(
+            "Guardar base" if compacto else "Guardar como predeterminado")
+        self.btn_restaurar.setText(
+            "Restaurar plantilla" if compacto else "Restaurar texto de la plantilla")
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._aplicar_modo_compacto(event.size().width())
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
