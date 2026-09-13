@@ -154,3 +154,27 @@ def test_conflicto_compartido_se_muestra_y_resuelve(monkeypatch, entorno, qapp):
     guardar_clientes_con_conflictos(None, [cliente])
 
     assert decisiones == [(cliente, {"email": "entrante"})]
+
+
+def test_historial_corrupto_se_recupera_de_copia_validada(entorno):
+    history.registrar("Aviso 1", "1T", 2026, "Uno", "uno.pdf")
+    history.registrar("Aviso 2", "1T", 2026, "Dos", "dos.pdf")
+    ruta = history._ruta()
+    ruta.write_text("{corrupto", "utf-8")
+
+    recuperado = history.cargar()
+    assert [entrada.plantilla for entrada in recuperado] == ["Aviso 1"]
+    assert ruta.with_suffix(".json.bak1").exists()
+
+
+def test_plantillas_corruptas_se_recuperan_de_copia_validada(entorno, monkeypatch):
+    plantilla = templates.PLANTILLAS[0]
+    monkeypatch.setattr(templates, "_overrides_cache", {})
+    templates.guardar_override(plantilla.id, "Título uno", "Cuerpo uno")
+    templates.guardar_override(plantilla.id, "Título dos", "Cuerpo dos")
+    ruta = templates._overrides_path()
+    ruta.write_text("[corrupto", "utf-8")
+    monkeypatch.setattr(templates, "_overrides_cache", None)
+
+    assert templates.titulo_tpl_activo(plantilla) == "Título uno"
+    assert ruta.with_suffix(".json.bak1").exists()

@@ -345,14 +345,16 @@ def _overrides_path() -> Path:
 def _overrides() -> dict[str, dict[str, str]]:
     global _overrides_cache
     if _overrides_cache is None:
-        datos = config.leer_json(_overrides_path(), {})
+        datos = config.leer_json(
+            _overrides_path(), {}, copias=3, validar=lambda valor: isinstance(valor, dict)
+        )
         _overrides_cache = datos if isinstance(datos, dict) else {}
     return _overrides_cache
 
 
 def _guardar_overrides() -> None:
     try:
-        config.escribir_json(_overrides_path(), _overrides())
+        config.escribir_json(_overrides_path(), _overrides(), copias=3)
     except Exception:
         pass
 

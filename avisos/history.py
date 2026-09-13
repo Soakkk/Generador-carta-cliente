@@ -32,7 +32,7 @@ def _ruta() -> Path:
 
 
 def cargar() -> list[Entrada]:
-    datos = config.leer_json(_ruta(), [])
+    datos = config.leer_json(_ruta(), [], copias=3, validar=lambda valor: isinstance(valor, list))
     permitidas = {f.name for f in fields(Entrada)}
     entradas: list[Entrada] = []
     for dato in datos if isinstance(datos, list) else []:
@@ -85,4 +85,4 @@ def registrar(plantilla: str, periodo: str, anio: int, cliente: str, ruta: str,
         cuerpo_tpl=cuerpo_tpl,
     ))
     entradas = entradas[-_MAX_ENTRADAS:]
-    config.escribir_json(_ruta(), [asdict(e) for e in entradas])
+    config.escribir_json(_ruta(), [asdict(e) for e in entradas], copias=3)
