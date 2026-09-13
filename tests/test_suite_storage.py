@@ -46,11 +46,11 @@ def test_fusion_rellena_campos_vacios_y_conserva_metadatos(tmp_path):
     assert resultado.cliente["nif"] == "B12345678"
     assert resultado.cliente["direccion"] == "Calle Mayor 1"
     registro = json.loads((tmp_path / "clientes.json").read_text("utf-8"))
-    assert registro["schema"] == 1
-    assert registro["clientes"]["B12345678"]["campos"]["email"] == {
-        "valor": "hola@acme.es",
+    assert registro["schema_version"] == 1
+    assert registro["clientes"]["B12345678"]["email"] == "hola@acme.es"
+    assert registro["clientes"]["B12345678"]["metadatos"]["email"] == {
         "origen": "AvisosEMarin",
-        "actualizado": "2026-09-13T10:00:00+00:00",
+        "fecha": "2026-09-13T10:00:00+00:00",
     }
     assert not (tmp_path / "clientes.json.tmp").exists()
 
@@ -84,6 +84,55 @@ def test_conflicto_no_pisa_valor_y_se_puede_resolver_expresamente(tmp_path):
     assert resuelto.cliente["email"] == "nuevo@example.com"
 
 
+def test_fusion_preserva_contrato_canonico_y_clientes_ajenos(tmp_path):
+    ruta = tmp_path / "clientes.json"
+    ruta.write_text(json.dumps({
+        "schema_version": 1,
+        "clientes": {
+            "11111111H": {
+                "nif": "11111111H",
+                "nombre": "Cliente Scanner",
+                "metadatos": {"nombre": {"origen": "Escaner", "fecha": "2026-09-12"}},
+                "conflictos": {},
+            },
+            "22222222J": {"nif": "22222222J", "nombre": "Cliente Fiscal"},
+        },
+        "extension_ajena": {"intacto": True},
+    }), "utf-8")
+
+    fusionar_cliente(
+        {"nif": "33333333P", "nombre": "Cliente Generador"},
+        origen="AvisosEMarin",
+        root=tmp_path,
+    )
+
+    registro = json.loads(ruta.read_text("utf-8"))
+    assert registro["schema_version"] == 1
+    assert "schema" not in registro
+    assert set(registro["clientes"]) == {"11111111H", "22222222J", "33333333P"}
+    assert registro["extension_ajena"] == {"intacto": True}
+
+
+def test_fusion_migra_contrato_experimental_sin_perder_clientes(tmp_path):
+    ruta = tmp_path / "clientes.json"
+    ruta.write_text(json.dumps({
+        "schema": 1,
+        "clientes": {
+            "B12345678": {"campos": {
+                "nif": {"valor": "B12345678", "origen": "Avisos", "actualizado": "2026-09-12"},
+                "nombre": {"valor": "Legacy", "origen": "Avisos", "actualizado": "2026-09-12"},
+            }}
+        },
+    }), "utf-8")
+
+    fusionar_cliente({"nif": "11111111H", "nombre": "Nuevo"}, origen="Avisos", root=tmp_path)
+
+    registro = json.loads(ruta.read_text("utf-8"))
+    assert registro["schema_version"] == 1
+    assert registro["clientes"]["B12345678"]["nombre"] == "Legacy"
+    assert registro["clientes"]["B12345678"]["metadatos"]["nombre"]["origen"] == "Avisos"
+
+
 def test_clientes_importa_sin_borrar_la_base_anterior(datos_aislados):
     """Migrar al directorio común no debe eliminar el JSON histórico local."""
     appdata, localappdata = datos_aislados
@@ -109,4 +158,3 @@ def test_clientes_importa_sin_borrar_la_base_anterior(datos_aislados):
     assert legacy.exists()
     comunes = listar_clientes_comunes()
     assert {c["nif"] for c in comunes} == {"11111111H", "22222222J"}
-

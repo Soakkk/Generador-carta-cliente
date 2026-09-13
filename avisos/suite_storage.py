@@ -51,22 +51,53 @@ def _ruta(root: str | Path | None = None) -> Path:
 
 
 def _registro(root: str | Path | None = None) -> dict[str, Any]:
-    datos = config.leer_json(_ruta(root), {"schema": SCHEMA, "clientes": {}})
-    if not isinstance(datos, dict) or datos.get("schema") != SCHEMA:
-        return {"schema": SCHEMA, "clientes": {}}
+    datos = config.leer_json(_ruta(root), {"schema_version": SCHEMA, "clientes": {}})
+    if not isinstance(datos, dict):
+        raise ValueError("El directorio compartido no contiene un objeto JSON")
     clientes = datos.get("clientes")
     if not isinstance(clientes, dict):
-        return {"schema": SCHEMA, "clientes": {}}
-    return {"schema": SCHEMA, "clientes": clientes}
+        raise ValueError("El directorio compartido no contiene un mapa de clientes")
+    if datos.get("schema_version") == SCHEMA:
+        return datos
+    if datos.get("schema") != SCHEMA:
+        raise ValueError("Versión desconocida del directorio compartido")
+
+    # Migración del formato experimental que esta aplicación publicó antes de
+    # adoptar el contrato común. Conservamos todos los clientes y metadatos.
+    migrado = {clave: valor for clave, valor in datos.items() if clave != "schema"}
+    migrado["schema_version"] = SCHEMA
+    migrado["clientes"] = {}
+    for clave, registro in clientes.items():
+        nif = normalizar_nif(clave)
+        if not nif or not isinstance(registro, dict):
+            continue
+        cliente: dict[str, Any] = {
+            "nif": nif,
+            "metadatos": {},
+            "conflictos": {},
+        }
+        campos = registro.get("campos", {})
+        if isinstance(campos, dict):
+            for campo, dato in campos.items():
+                if not isinstance(dato, dict) or "valor" not in dato:
+                    continue
+                cliente[campo] = dato["valor"]
+                cliente["metadatos"][campo] = {
+                    "origen": str(dato.get("origen", "")),
+                    "fecha": str(dato.get("actualizado", "")),
+                }
+        for extra, valor in registro.items():
+            if extra != "campos" and extra not in cliente:
+                cliente[extra] = valor
+        migrado["clientes"][nif] = cliente
+    return migrado
 
 
 def _valor_visible(nif: str, registro_cliente: dict[str, Any]) -> dict[str, Any]:
-    campos = registro_cliente.get("campos", {})
     visible: dict[str, Any] = {"nif": nif}
     for campo in CAMPOS:
-        dato = campos.get(campo, {}) if isinstance(campos, dict) else {}
-        if isinstance(dato, dict) and "valor" in dato:
-            visible[campo] = dato["valor"]
+        if campo in registro_cliente:
+            visible[campo] = registro_cliente[campo]
     visible["nif"] = nif
     return visible
 
@@ -100,8 +131,11 @@ def fusionar_cliente(
     marca = actualizado or datetime.now(timezone.utc).isoformat(timespec="seconds")
     decisiones = resolver or {}
     registro = _registro(root)
-    entrada = registro["clientes"].setdefault(nif, {"campos": {}})
-    campos = entrada.setdefault("campos", {})
+    entrada = registro["clientes"].setdefault(
+        nif, {"nif": nif, "metadatos": {}, "conflictos": {}}
+    )
+    metadatos = entrada.setdefault("metadatos", {})
+    conflictos_guardados = entrada.setdefault("conflictos", {})
     conflictos: list[ConflictoCampo] = []
     cambio = False
 
@@ -115,32 +149,41 @@ def fusionar_cliente(
             valor = valor.strip()
         if valor in (None, ""):
             continue
-        anterior = campos.get(campo)
-        if not isinstance(anterior, dict) or anterior.get("valor") in (None, ""):
-            campos[campo] = {"valor": valor, "origen": origen, "actualizado": marca}
+        anterior = entrada.get(campo)
+        meta_anterior = metadatos.get(campo, {})
+        if anterior in (None, ""):
+            entrada[campo] = valor
+            metadatos[campo] = {"origen": origen, "fecha": marca}
             cambio = True
             continue
-        if anterior.get("valor") == valor:
+        if anterior == valor:
             continue
 
         decision = decisiones.get(campo)
         if decision == "entrante":
-            campos[campo] = {"valor": valor, "origen": origen, "actualizado": marca}
+            entrada[campo] = valor
+            metadatos[campo] = {"origen": origen, "fecha": marca}
+            conflictos_guardados.pop(campo, None)
             cambio = True
         elif decision == "existente":
+            conflictos_guardados.pop(campo, None)
+            cambio = True
             continue
         else:
+            alternativas = conflictos_guardados.setdefault(campo, [anterior])
+            if valor not in alternativas:
+                alternativas.append(valor)
+                cambio = True
             conflictos.append(ConflictoCampo(
                 campo=campo,
-                existente=anterior.get("valor"),
+                existente=anterior,
                 entrante=valor,
-                origen_existente=str(anterior.get("origen", "")),
+                origen_existente=str(meta_anterior.get("origen", "")),
                 origen_entrante=origen,
-                actualizado_existente=str(anterior.get("actualizado", "")),
+                actualizado_existente=str(meta_anterior.get("fecha", "")),
                 actualizado_entrante=marca,
             ))
 
     if cambio or not _ruta(root).exists():
         config.escribir_json(_ruta(root), registro)
     return ResultadoFusion(_valor_visible(nif, entrada), conflictos)
-
