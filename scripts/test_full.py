@@ -13,6 +13,7 @@ if str(RAIZ) not in sys.path:
 # Aislar la config del usuario real durante el test
 tmp_cfg = Path(tempfile.mkdtemp())
 os.environ["APPDATA"] = str(tmp_cfg)
+os.environ["LOCALAPPDATA"] = str(tmp_cfg)
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QTimer

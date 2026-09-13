@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -158,3 +159,10 @@ def test_clientes_importa_sin_borrar_la_base_anterior(datos_aislados):
     assert legacy.exists()
     comunes = listar_clientes_comunes()
     assert {c["nif"] for c in comunes} == {"11111111H", "22222222J"}
+
+
+def test_bateria_funcional_aisla_localappdata_antes_de_importar_la_app():
+    fuente = (Path(__file__).parents[1] / "scripts" / "test_full.py").read_text("utf-8")
+    aislamiento = 'os.environ["LOCALAPPDATA"] = str(tmp_cfg)'
+    assert aislamiento in fuente
+    assert fuente.index(aislamiento) < fuente.index("from avisos import clients")
