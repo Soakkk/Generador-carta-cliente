@@ -22,9 +22,12 @@ from . import extras as X
 from . import history as H
 from . import render as R
 from . import templates as T
+from . import updater as U
+from .draft import guardar_borrador, leer_borrador
 from .log import logger
-from .ui.actualizaciones import comprobar_actualizaciones
-from .ui.clientes import ClientesDialog, EditorClienteDialog
+from .ui.actualizaciones import comprobar_actualizaciones, iniciar_instalador
+from .ui.clientes import ClientesDialog, EditorClienteDialog, guardar_clientes_con_conflictos
+from .ui.clientes import clave_orden_cliente
 from .ui.controles import ComboSinRueda, FechaSinRueda, SpinSinRueda
 from .ui.extras import ExtrasDialog
 from .ui.formato import FormatoDialog
@@ -62,17 +65,34 @@ class MainWindow(QMainWindow):
         self._editor_plantillas: PlantillaEditorDialog | None = None
         self._editor_formato: FormatoDialog | None = None
         self._comprobacion_inicial_hecha = False
+        self._estado_actualizacion = U.ESTADO_INACTIVA
+        self._ruta_update_lista: str | None = None
+        self._instalar_al_cerrar = False
+        self._restaurando_borrador = False
+        self._undo_cliente: dict | None = None
+        self._undo_documento: tuple[int, str] | None = None
         self._extra_buttons: dict[str, QToolButton] = {}
         self._carpeta_destino = str(Path.home() / "Desktop")
 
         self._construir_menu()
         self._construir_ui()
+        self._timer_borrador = QTimer(self)
+        self._timer_borrador.setSingleShot(True)
+        self._timer_borrador.setInterval(300)
+        self._timer_borrador.timeout.connect(self._guardar_borrador_ahora)
+        self._timer_actualizaciones = QTimer(self)
+        self._timer_actualizaciones.setInterval(6 * 60 * 60 * 1000)
+        self._timer_actualizaciones.timeout.connect(self._comprobar_actualizacion_periodica)
+        self._timer_actualizaciones.start()
         self._aplicar_periodo_sugerido()
         self._cargar_ajustes()
         self._refrescar_completer_clientes()
         self._refrescar_lista_extras()
         self._on_plantilla_cambia(forzar_docs=True)
         self._regenerar_editor()
+        borrador = leer_borrador()
+        if borrador:
+            self._restaurar_borrador(borrador)
 
     # ------------------------------------------------------------------ menu
     def _construir_menu(self) -> None:
@@ -80,11 +100,18 @@ class MainWindow(QMainWindow):
         menu.addAction("Clientes…", self._abrir_clientes)
         menu.addAction("Generar para varios clientes…", self._abrir_lote)
         menu.addAction("Historial de avisos…", self._abrir_historial)
+        accion_deshacer = menu.addAction("Deshacer cambio de cliente", self._deshacer_cambio_cliente)
+        accion_deshacer.setShortcut("Ctrl+Shift+Z")
+        accion_deshacer_doc = menu.addAction(
+            "Deshacer eliminación de documento", self._deshacer_eliminacion_documento
+        )
+        accion_deshacer_doc.setShortcut("Ctrl+Alt+Z")
         menu.addSeparator()
         menu.addAction("Editar plantillas…", self._abrir_editor_plantillas)
         menu.addAction("Formato del documento…", self._abrir_formato)
         menu.addAction("Documentación opcional…", self._abrir_extras)
         menu.addSeparator()
+        menu.addAction("Elegir carpeta de PDF…", self._elegir_carpeta_destino)
         menu.addAction("Abrir carpeta de datos…", self._abrir_carpeta_datos)
 
         ayuda = self.menuBar().addMenu("Ayuda")
@@ -99,15 +126,15 @@ class MainWindow(QMainWindow):
         raiz.setContentsMargins(0, 0, 0, 0)
         raiz.setSpacing(0)
 
-        cabecera = QFrame()
-        cabecera.setObjectName("cabecera")
-        cabecera.setFixedHeight(64)
-        lc = QHBoxLayout(cabecera)
-        lc.setContentsMargins(22, 10, 22, 10)
+        self.cabecera = QFrame()
+        self.cabecera.setObjectName("cabecera")
+        self.cabecera.setFixedHeight(56)
+        lc = QHBoxLayout(self.cabecera)
+        lc.setContentsMargins(18, 8, 18, 8)
         logo = QLabel()
         logo.setPixmap(QPixmap(str(config.asset("app-icon.png"))).scaled(
-            42, 42, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        logo.setFixedSize(46, 46)
+            36, 36, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setFixedSize(40, 40)
         lc.addWidget(logo)
         marca = QVBoxLayout()
         titulo = QLabel("Avisos Asesoría E. Marín")
@@ -118,6 +145,7 @@ class MainWindow(QMainWindow):
         marca.addWidget(subtitulo)
         lc.addLayout(marca)
         lc.addStretch()
+        self._acciones_cabecera = []
         for texto, slot in (("Clientes", self._abrir_clientes),
                             ("Historial", self._abrir_historial),
                             ("Varios clientes", self._abrir_lote)):
@@ -125,7 +153,8 @@ class MainWindow(QMainWindow):
             boton.setObjectName("cabeceraAccion")
             boton.clicked.connect(slot)
             lc.addWidget(boton)
-        raiz.addWidget(cabecera)
+            self._acciones_cabecera.append(boton)
+        raiz.addWidget(self.cabecera)
 
         contenido = QWidget()
         cuerpo = QVBoxLayout(contenido)
@@ -149,6 +178,8 @@ class MainWindow(QMainWindow):
         self._timer.setSingleShot(True)
         self._timer.setInterval(250)
         self._timer.timeout.connect(self._actualizar_preview)
+        self._modo_compacto = False
+        self._aplicar_modo_compacto(self.width())
 
     def _construir_barra_acciones(self) -> QWidget:
         barra = QFrame()
@@ -165,6 +196,8 @@ class MainWindow(QMainWindow):
         self.btn_copiar = QPushButton("Copiar texto")
         self.btn_copiar.setObjectName("primario")
         self.btn_copiar.setMinimumHeight(40)
+        self.btn_copiar.setShortcut("Ctrl+Return")
+        self.btn_copiar.setToolTip("Copiar el texto para WhatsApp o correo (Ctrl+Entrar)")
         self.btn_copiar.clicked.connect(self._copiar_texto)
         fila.addWidget(self.btn_copiar)
 
@@ -173,15 +206,20 @@ class MainWindow(QMainWindow):
         self.btn_pdf.clicked.connect(lambda: self._guardar_pdf(abrir=False))
         fila.addWidget(self.btn_pdf)
 
-        btn_generar_abrir = QPushButton("Guardar y abrir")
-        btn_generar_abrir.clicked.connect(lambda: self._guardar_pdf(abrir=True))
-        fila.addWidget(btn_generar_abrir)
+        self.btn_siguiente = QPushButton("Guardar y siguiente cliente")
+        self.btn_siguiente.setMinimumHeight(40)
+        self.btn_siguiente.clicked.connect(lambda: self._guardar_y_siguiente(abrir=False))
+        fila.addWidget(self.btn_siguiente)
 
-        btn_destino = QToolButton()
-        btn_destino.setText("Carpeta de PDF…")
-        btn_destino.setToolTip("Cambiar dónde se guardan los PDF")
-        btn_destino.clicked.connect(self._elegir_carpeta_destino)
-        fila.addWidget(btn_destino)
+        self.btn_guardar_abrir = QPushButton("Guardar y abrir")
+        self.btn_guardar_abrir.clicked.connect(lambda: self._guardar_pdf(abrir=True))
+        fila.addWidget(self.btn_guardar_abrir)
+
+        self.btn_carpeta = QToolButton()
+        self.btn_carpeta.setText("Carpeta de PDF…")
+        self.btn_carpeta.setToolTip("Cambiar dónde se guardan los PDF")
+        self.btn_carpeta.clicked.connect(self._elegir_carpeta_destino)
+        fila.addWidget(self.btn_carpeta)
 
         self.lbl_destino = QLabel("")
         self.lbl_destino.setObjectName("rutaDestino")
@@ -191,7 +229,8 @@ class MainWindow(QMainWindow):
 
     def _construir_formulario(self) -> QWidget:
         panel = QWidget()
-        panel.setObjectName("tarjeta")
+        panel.setObjectName("panelFormulario")
+        self.panel_formulario = panel
         panel.setMinimumWidth(300)
         form_scroll = QScrollArea()
         form_scroll.setWidgetResizable(True)
@@ -286,6 +325,12 @@ class MainWindow(QMainWindow):
         self.lbl_ficha_cliente.setWordWrap(True)
         ly_d.addRow("", self.lbl_ficha_cliente)
 
+        self.txt_nif = QLineEdit()
+        self.txt_nif.setPlaceholderText("NIF del cliente")
+        self.txt_nif.setClearButtonEnabled(True)
+        self.txt_nif.textChanged.connect(self._on_nif_cambia)
+        ly_d.addRow("NIF:", self.txt_nif)
+
         self.date_limite = FechaSinRueda()
         self.date_limite.setCalendarPopup(True)
         self.date_limite.setDisplayFormat("dd/MM/yyyy")
@@ -376,7 +421,8 @@ class MainWindow(QMainWindow):
 
     def _construir_editor(self) -> QWidget:
         contenedor = QWidget()
-        contenedor.setObjectName("tarjeta")
+        contenedor.setObjectName("panelDocumento")
+        self.panel_documento = contenedor
         lay = QVBoxLayout(contenedor)
         lay.setContentsMargins(14, 14, 14, 14)
 
@@ -492,24 +538,46 @@ class MainWindow(QMainWindow):
         boton("≡", "Centrar", lambda: self.editor.setAlignment(Qt.AlignHCenter))
         barra.addStretch(1)
 
-        btn_guardar_def = QPushButton("Guardar como predeterminado")
-        btn_guardar_def.setToolTip("Convierte este texto en el texto base para todos los "
-                                   "futuros avisos de este tipo (los datos se seguirán "
-                                   "rellenando solos)")
-        btn_guardar_def.clicked.connect(self._guardar_como_predeterminado)
-        barra.addWidget(btn_guardar_def)
+        self.btn_guardar_def = QPushButton("Guardar como predeterminado")
+        self.btn_guardar_def.setToolTip(
+            "Convierte este texto en el texto base para todos los futuros avisos "
+            "de este tipo (los datos se seguirán rellenando solos)")
+        self.btn_guardar_def.clicked.connect(self._guardar_como_predeterminado)
+        barra.addWidget(self.btn_guardar_def)
 
-        btn_restaurar = QPushButton("Restaurar texto de la plantilla")
-        btn_restaurar.setToolTip("Vuelve al texto predefinido con los datos actuales del formulario")
-        btn_restaurar.clicked.connect(self._restaurar_texto)
-        barra.addWidget(btn_restaurar)
+        self.btn_restaurar = QPushButton("Restaurar texto de la plantilla")
+        self.btn_restaurar.setToolTip(
+            "Vuelve al texto predefinido con los datos actuales del formulario")
+        self.btn_restaurar.clicked.connect(self._restaurar_texto)
+        barra.addWidget(self.btn_restaurar)
         return barra
+
+    def _aplicar_modo_compacto(self, ancho: int) -> None:
+        """Ajusta accesos redundantes y etiquetas sin retirar acciones esenciales."""
+        if not hasattr(self, "btn_copiar"):
+            return
+        compacto = ancho < 1180
+        self._modo_compacto = compacto
+        self.btn_carpeta.setVisible(not compacto)
+        for boton in self._acciones_cabecera:
+            boton.setVisible(not compacto)
+        self.btn_pdf.setText("Guardar PDF" if compacto else "Guardar PDF…")
+        self.btn_siguiente.setText(
+            "Guardar y siguiente" if compacto else "Guardar y siguiente cliente")
+        self.btn_guardar_def.setText(
+            "Guardar base" if compacto else "Guardar como predeterminado")
+        self.btn_restaurar.setText(
+            "Restaurar plantilla" if compacto else "Restaurar texto de la plantilla")
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._aplicar_modo_compacto(event.size().width())
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
         if not self._comprobacion_inicial_hecha:
             self._comprobacion_inicial_hecha = True
-            QTimer.singleShot(3000, lambda: comprobar_actualizaciones(self, __version__, silencioso=True))
+            QTimer.singleShot(3000, self._comprobar_actualizacion_periodica)
 
     # --------------------------------------------------------------- estado
     def _plantillas_ordenadas(self) -> list[T.Plantilla]:
@@ -542,6 +610,7 @@ class MainWindow(QMainWindow):
             periodo=self._periodo_actual(),
             anio=self.spin_anio.value(),
             cliente=self.txt_cliente.text(),
+            nif=self.txt_nif.text(),
             fecha_limite=date(qd.year(), qd.month(), qd.day()),
             documentos=self._documentos_actuales(),
             documentos_extra=self._extras_marcados(),
@@ -610,6 +679,7 @@ class MainWindow(QMainWindow):
         self._al_cambiar_datos()
 
     def _set_docs(self, docs: list[str]) -> None:
+        self._undo_documento = None
         self.lista_docs.blockSignals(True)
         self.lista_docs.clear()
         for texto in docs:
@@ -641,8 +711,21 @@ class MainWindow(QMainWindow):
     def _quitar_documento(self) -> None:
         fila = self.lista_docs.currentRow()
         if fila >= 0:
-            self.lista_docs.takeItem(fila)
+            eliminado = self.lista_docs.takeItem(fila)
+            self._undo_documento = (fila, eliminado.text())
             self._on_docs_editados()
+
+    def _deshacer_eliminacion_documento(self) -> None:
+        if self._undo_documento is None:
+            return
+        fila, texto = self._undo_documento
+        item = QListWidgetItem(texto)
+        item.setFlags(item.flags() | Qt.ItemIsEditable)
+        self._ajustar_alto_documento(item)
+        self.lista_docs.insertItem(min(fila, self.lista_docs.count()), item)
+        self.lista_docs.setCurrentItem(item)
+        self._undo_documento = None
+        self._on_docs_editados()
 
     def _mover_documento(self, delta: int) -> None:
         fila = self.lista_docs.currentRow()
@@ -707,7 +790,14 @@ class MainWindow(QMainWindow):
             boton.blockSignals(False)
 
     def _refrescar_completer_clientes(self) -> None:
-        opciones = [f"{c.nombre} · {c.nif}" if c.nif else c.nombre for c in C.cargar()]
+        recientes = {nombre.casefold(): i for i, nombre in enumerate(H.clientes_recientes())}
+        clientes = C.cargar()
+        clientes.sort(key=lambda c: (
+            not c.favorito,
+            recientes.get(c.nombre.casefold(), len(recientes)),
+            *clave_orden_cliente(c)[1:],
+        ))
+        opciones = [f"{c.nombre} · {c.nif}" if c.nif else c.nombre for c in clientes]
         modelo = QStringListModel(opciones, self)
         completer = QCompleter(modelo, self)
         completer.setCaseSensitivity(Qt.CaseInsensitive)
@@ -723,6 +813,15 @@ class MainWindow(QMainWindow):
         self._actualizar_ficha_cliente()
         self._al_cambiar_datos()
 
+    def _on_nif_cambia(self) -> None:
+        cliente = C.buscar(C.cargar(), self.txt_nif.text())
+        if cliente is not None and cliente.nombre != self.txt_cliente.text():
+            bloqueado = self.txt_cliente.blockSignals(True)
+            self.txt_cliente.setText(cliente.nombre)
+            self.txt_cliente.blockSignals(bloqueado)
+        self._actualizar_ficha_cliente()
+        self._al_cambiar_datos()
+
     def _actualizar_ficha_cliente(self) -> None:
         cliente = C.buscar(C.cargar(), self.txt_cliente.text())
         self.btn_editar_cliente.setEnabled(cliente is not None)
@@ -731,6 +830,10 @@ class MainWindow(QMainWindow):
                 "Puede dejarse vacío para un aviso genérico" if not self.txt_cliente.text().strip()
                 else "Cliente nuevo: se guardará al generar el aviso")
             return
+        if cliente.nif and self.txt_nif.text() != cliente.nif:
+            bloqueado = self.txt_nif.blockSignals(True)
+            self.txt_nif.setText(cliente.nif)
+            self.txt_nif.blockSignals(bloqueado)
         detalles = [dato for dato in (cliente.nif, cliente.telefono, cliente.email) if dato]
         self.lbl_ficha_cliente.setText(" · ".join(detalles) if detalles else "Cliente guardado")
 
@@ -744,7 +847,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Cliente ya existe",
                                 f"Ya hay un cliente llamado «{nuevo.nombre}».")
             return
-        C.guardar(C.upsert(clientes, nuevo))
+        guardar_clientes_con_conflictos(self, C.upsert(clientes, nuevo))
         self._refrescar_completer_clientes()
         self.txt_cliente.setText(nuevo.nombre)
 
@@ -756,7 +859,9 @@ class MainWindow(QMainWindow):
         dlg = EditorClienteDialog(self, actual)
         if dlg.exec() == EditorClienteDialog.Accepted:
             editado = dlg.cliente()
-            C.guardar(C.upsert(clientes, editado, actual.nombre))
+            guardar_clientes_con_conflictos(
+                self, C.upsert(clientes, editado, actual.nombre)
+            )
             self._refrescar_completer_clientes()
             self.txt_cliente.setText(editado.nombre)
 
@@ -773,6 +878,7 @@ class MainWindow(QMainWindow):
             self._set_estado("Hay cambios del formulario pendientes de aplicar", aviso=True)
         else:
             self._regenerar_editor()
+        self._programar_borrador()
 
     def _regenerar_editor(self) -> None:
         est = E.cargar()
@@ -849,6 +955,103 @@ class MainWindow(QMainWindow):
             return
         self._editor_dirty = True
         self._programar_preview()
+        self._programar_borrador()
+
+    # ---------------------------------------------------------- borrador
+    def _programar_borrador(self) -> None:
+        if (not self._restaurando_borrador and
+                hasattr(self, "_timer_borrador")):
+            self._timer_borrador.start()
+
+    def _serializar_borrador(self) -> dict:
+        qd = self.date_limite.date()
+        return {
+            "plantilla_id": self.cmb_plantilla.currentData(),
+            "cliente": self.txt_cliente.text(),
+            "nif": self.txt_nif.text(),
+            "periodo": self._periodo_actual(),
+            "anio": self.spin_anio.value(),
+            "fecha_limite": qd.toString(Qt.ISODate),
+            "documentos": self._documentos_actuales(),
+            "extras": self._extras_etiquetas_marcadas(),
+            "navidad": self.chk_navidad.isChecked(),
+            "notas_activas": self.gb_notas.isChecked(),
+            "notas": self.txt_notas.toPlainText(),
+            "editor_html": self.editor.toHtml(),
+            "editor_dirty": self._editor_dirty,
+            "datos_pendientes": self._datos_pendientes,
+            "carpeta_destino": self._carpeta_destino,
+        }
+
+    def _guardar_borrador_ahora(self) -> None:
+        if self._restaurando_borrador:
+            return
+        try:
+            guardar_borrador(self._serializar_borrador())
+        except Exception:
+            logger.exception("No se pudo guardar el borrador recuperable")
+
+    def _restaurar_borrador(self, datos: dict) -> None:
+        self._restaurando_borrador = True
+        try:
+            indice = self.cmb_plantilla.findData(datos.get("plantilla_id"))
+            if indice >= 0:
+                bloqueado = self.cmb_plantilla.blockSignals(True)
+                self.cmb_plantilla.setCurrentIndex(indice)
+                self.cmb_plantilla.blockSignals(bloqueado)
+            self._set_periodo(str(datos.get("periodo", "1T")))
+            bloqueado = self.spin_anio.blockSignals(True)
+            self.spin_anio.setValue(int(datos.get("anio", self.spin_anio.value())))
+            self.spin_anio.blockSignals(bloqueado)
+            fecha = QDate.fromString(str(datos.get("fecha_limite", "")), Qt.ISODate)
+            if fecha.isValid():
+                bloqueado = self.date_limite.blockSignals(True)
+                self.date_limite.setDate(fecha)
+                self.date_limite.blockSignals(bloqueado)
+            for campo, valor in (
+                (self.txt_cliente, datos.get("cliente", "")),
+                (self.txt_nif, datos.get("nif", "")),
+            ):
+                bloqueado = campo.blockSignals(True)
+                campo.setText(str(valor))
+                campo.blockSignals(bloqueado)
+            documentos = datos.get("documentos")
+            if isinstance(documentos, list):
+                self._set_docs([str(x) for x in documentos])
+            self._refrescar_lista_extras()
+            extras = datos.get("extras", [])
+            for etiqueta in extras if isinstance(extras, list) else []:
+                if etiqueta in self._extra_buttons:
+                    self._extra_buttons[etiqueta].setChecked(True)
+            bloqueado = self.chk_navidad.blockSignals(True)
+            self.chk_navidad.setChecked(bool(datos.get("navidad", False)))
+            self.chk_navidad.blockSignals(bloqueado)
+            bloqueado = self.gb_notas.blockSignals(True)
+            self.gb_notas.setChecked(bool(datos.get("notas_activas", False)))
+            self.gb_notas.blockSignals(bloqueado)
+            bloqueado = self.txt_notas.blockSignals(True)
+            self.txt_notas.setPlainText(str(datos.get("notas", "")))
+            self.txt_notas.blockSignals(bloqueado)
+            carpeta = datos.get("carpeta_destino")
+            if carpeta:
+                self._carpeta_destino = str(carpeta)
+                self._actualizar_destino_ui()
+            html = datos.get("editor_html")
+            if isinstance(html, str) and html.strip():
+                self._cargar_html_editor(html, dirty=bool(datos.get("editor_dirty", False)))
+                self._datos_pendientes = bool(datos.get("datos_pendientes", False))
+                self.banner_datos.setVisible(self._datos_pendientes)
+            else:
+                self._regenerar_editor()
+            self._actualizar_ficha_cliente()
+        finally:
+            self._restaurando_borrador = False
+
+    def _deshacer_cambio_cliente(self) -> None:
+        if self._undo_cliente:
+            datos, self._undo_cliente = self._undo_cliente, None
+            self._restaurar_borrador(datos)
+            self._guardar_borrador_ahora()
 
     # --- barra de formato ---
     def _fmt_negrita(self) -> None:
@@ -958,9 +1161,10 @@ class MainWindow(QMainWindow):
             return True
         return caja.clickedButton() is actual
 
-    def _guardar_pdf(self, abrir: bool = False) -> None:
-        if not self._resolver_datos_pendientes():
-            return
+    def _guardar_pdf(self, abrir: bool = False, *, mostrar_confirmacion: bool = True,
+                     resolver_pendientes: bool = True) -> Path | None:
+        if resolver_pendientes and not self._resolver_datos_pendientes():
+            return None
         ctx = self._contexto()
         plantilla = self._plantilla_actual()
         carpeta = Path(self._carpeta_destino)
@@ -969,7 +1173,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "Carpeta no válida",
                                 f"No se puede usar la carpeta de destino:\n{e}")
-            return
+            return None
         destino = ruta_sin_colision(carpeta, nombre_archivo(plantilla, ctx))
 
         info: dict = {}
@@ -978,7 +1182,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.exception("Fallo al generar el PDF %s", destino)
             QMessageBox.critical(self, "Error", f"No se pudo generar el PDF:\n{e}")
-            return
+            return None
 
         logger.info("PDF generado: %s (%s %s, cliente=%s)",
                     destino.name, ctx.periodo_corto, ctx.anio, ctx.cliente or "(generico)")
@@ -989,15 +1193,19 @@ class MainWindow(QMainWindow):
             extras=self._extras_etiquetas_marcadas(), navidad=ctx.navidad,
             notas=ctx.notas, titulo_tpl=titulo_tpl, cuerpo_tpl=cuerpo_tpl,
         )
-        if C.asegurar_cliente(ctx.cliente):
+        if C.asegurar_cliente(ctx.cliente, ctx.nif):
             self._refrescar_completer_clientes()
+        C.registrar_uso(ctx.cliente)
         self._registrar_uso_plantilla()
         self._guardar_ajustes(carpeta)
         self._set_estado(f"PDF generado: {destino.name}")
 
         if abrir:
             self._abrir_ruta(destino)
-            return
+            return destino
+
+        if not mostrar_confirmacion:
+            return destino
 
         mensaje = f"Aviso guardado en:\n{destino}"
         if info.get("desborda"):
@@ -1017,8 +1225,41 @@ class MainWindow(QMainWindow):
         elif pulsado is btn_carpeta:
             self._abrir_ruta(destino.parent)
         elif pulsado is btn_otro:
-            self.txt_cliente.clear()
-            self.txt_cliente.setFocus()
+            documento_tpl = self._instantanea_documento()
+            self._limpiar_para_siguiente(documento_tpl, self._editor_dirty)
+        return destino
+
+    def _limpiar_para_siguiente(self, documento_tpl: tuple[str, str], dirty: bool) -> None:
+        self._undo_cliente = self._serializar_borrador()
+        for campo in (self.txt_cliente, self.txt_nif):
+            bloqueado = campo.blockSignals(True)
+            campo.clear()
+            campo.blockSignals(bloqueado)
+        titulo_tpl, cuerpo_tpl = documento_tpl
+        ctx = self._contexto()
+        html = R.componer_documento(
+            T.render_titulo_texto(ctx, titulo_tpl),
+            T.render_cuerpo_texto(ctx, cuerpo_tpl),
+            E.cargar(),
+        )
+        self._cargar_html_editor(html, dirty=dirty)
+        self._actualizar_ficha_cliente()
+        self.txt_cliente.setFocus()
+        self._guardar_borrador_ahora()
+
+    def _guardar_y_siguiente(self, abrir: bool = False) -> Path | None:
+        if not self._resolver_datos_pendientes():
+            return None
+        documento_tpl = self._instantanea_documento()
+        dirty = self._editor_dirty
+        salida = self._guardar_pdf(
+            abrir=abrir, mostrar_confirmacion=False, resolver_pendientes=False
+        )
+        if salida is None:
+            return None
+        self._limpiar_para_siguiente(documento_tpl, dirty)
+        self._set_estado(f"PDF generado: {salida.name} · listo para el siguiente cliente")
+        return salida
 
     def _abrir_ruta(self, ruta: Path) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(ruta)))
@@ -1134,7 +1375,47 @@ class MainWindow(QMainWindow):
             self._regenerar_editor()
 
     def _buscar_actualizaciones_manual(self) -> None:
+        if self._estado_actualizacion == U.ESTADO_LISTA and self._ruta_update_lista:
+            self._set_estado("Actualización lista · se instalará al cerrar")
+            return
         comprobar_actualizaciones(self, __version__, silencioso=False)
+
+    def _comprobar_actualizacion_periodica(self) -> None:
+        if self._estado_actualizacion in (
+            U.ESTADO_COMPROBANDO, U.ESTADO_DESCARGANDO, U.ESTADO_LISTA
+        ):
+            return
+        comprobar_actualizaciones(self, __version__, silencioso=True)
+
+    def _actualizacion_estado(self, estado: str) -> None:
+        self._estado_actualizacion = estado
+
+    def _actualizacion_lista(self, ruta: str) -> None:
+        self._guardar_borrador_ahora()
+        self._ruta_update_lista = ruta
+        self._instalar_al_cerrar = True
+        self._estado_actualizacion = U.ESTADO_LISTA
+        self._set_estado("Actualización lista · se instalará al cerrar")
+
+    def _actualizacion_error(self, mensaje: str) -> None:
+        if self._estado_actualizacion == U.ESTADO_LISTA and self._ruta_update_lista:
+            logger.info("Se conserva la actualización ya preparada: %s", mensaje)
+            return
+        self._estado_actualizacion = U.ESTADO_ERROR
+        logger.info("Actualización pendiente de reintento: %s", mensaje)
+
+    def _instalar_actualizacion_ahora(self) -> None:
+        if not self._ruta_update_lista:
+            return
+        self._guardar_borrador_ahora()
+        try:
+            iniciar_instalador(self._ruta_update_lista)
+        except Exception as exc:
+            self._actualizacion_error(str(exc))
+            QMessageBox.critical(self, "Error", f"No se pudo iniciar el instalador:\n{exc}")
+            return
+        self._instalar_al_cerrar = False
+        QApplication.instance().quit()
 
     def _abrir_carpeta_datos(self) -> None:
         """Abre la carpeta donde se guardan clientes, historial, plantillas
@@ -1194,9 +1475,16 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        self._guardar_borrador_ahora()
         self._actualizar_ajustes(
             plantilla=self.cmb_plantilla.currentData(),
             geometria=bytes(self.saveGeometry().toHex()).decode("ascii"),
             splitter=self.splitter.sizes(),
         )
+        if self._instalar_al_cerrar and self._ruta_update_lista:
+            try:
+                iniciar_instalador(self._ruta_update_lista)
+                self._instalar_al_cerrar = False
+            except Exception:
+                logger.exception("No se pudo iniciar la actualización preparada al cerrar")
         super().closeEvent(event)

@@ -6,6 +6,16 @@ on:
       - 'v*'
   pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versión X.Y.Z ya sincronizada en el código'
+        required: false
+        type: string
+      publish:
+        description: 'Publicar el instalador en GitHub Releases'
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -24,12 +34,18 @@ jobs:
       - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt pytest
       - name: Ejecutar pruebas funcionales
         env:
           QT_QPA_PLATFORM: offscreen
           PYTHONPATH: .
         run: python scripts/test_full.py
+      - name: Ejecutar pruebas pytest
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+      - name: Compilar módulos
+        run: python -m compileall -q avisos
 
   build:
     needs: tests
@@ -47,6 +63,17 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
+      - name: Verificar versiones sincronizadas
+        shell: pwsh
+        run: |
+          $app = (Select-String -Path avisos/__init__.py -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          $iss = (Select-String -Path installer/AvisosEMarin.iss -Pattern '#define MyAppVersion "([^"]+)"').Matches[0].Groups[1].Value
+          if ($app -ne $iss) { throw "Versiones sin sincronizar: app=$app installer=$iss" }
+          $requested = "${{ inputs.version }}"
+          if ($requested -and $requested -ne $app) { throw "La versión solicitada $requested no coincide con $app" }
+          if ("${{ github.ref }}" -like "refs/tags/v*" -and "${{ github.ref_name }}" -ne "v$app") {
+            throw "El tag ${{ github.ref_name }} no coincide con v$app"
+          }
       - name: Compilar aplicación
         run: pyinstaller --noconfirm --clean AvisosEMarin.spec
       - name: Construir instalador
@@ -61,14 +88,27 @@ jobs:
           $exe = Get-ChildItem dist_installer/AvisosEMarin_Setup_*.exe | Select-Object -First 1
           $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
           "$hash  $($exe.Name)" | Out-File -Encoding ascii "$($exe.FullName).sha256"
+      - name: Crear portable y SHA-256
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path avisos/__init__.py -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          $zip = "AvisosEMarin_v$v.zip"
+          Compress-Archive -Path dist/AvisosEMarin/* -DestinationPath $zip -Force
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zip" | Out-File -Encoding ascii "$zip.sha256"
       - name: Subir instalador como artefacto
         uses: actions/upload-artifact@v4
         with:
           name: AvisosEMarin-Setup
-          path: dist_installer/AvisosEMarin_Setup_*.exe*
+          path: |
+            dist_installer/AvisosEMarin_Setup_*.exe*
+            AvisosEMarin_v*.zip*
       - name: Publicar release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.publish
         uses: softprops/action-gh-release@v2
         with:
-          files: dist_installer/AvisosEMarin_Setup_*.exe*
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', inputs.version) }}
+          files: |
+            dist_installer/AvisosEMarin_Setup_*.exe*
+            AvisosEMarin_v*.zip*
           generate_release_notes: true

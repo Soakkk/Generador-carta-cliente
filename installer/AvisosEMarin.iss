@@ -4,7 +4,7 @@
 
 #define MyAppName "Avisos Asesoria E. Marin"
 #ifndef MyAppVersion
-  #define MyAppVersion "1.10.0"
+  #define MyAppVersion "1.11.0"
 #endif
 #define MyAppPublisher "Asesoria E. Marin"
 #define MyAppExeName "AvisosEMarin.exe"
