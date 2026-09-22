@@ -30,7 +30,6 @@ from .ui.clientes import ClientesDialog, EditorClienteDialog, guardar_clientes_c
 from .ui.clientes import clave_orden_cliente
 from .ui.controles import ComboSinRueda, FechaSinRueda, SpinSinRueda
 from .ui.extras import ExtrasDialog
-from .ui.formato import FormatoDialog
 from .ui.historial import HistorialDialog
 from .ui.lote import LoteDialog
 from .ui.plantillas import PlantillaEditorDialog
@@ -68,7 +67,6 @@ class MainWindow(QMainWindow):
         self._datos_pendientes = False   # cambio el formulario tras editar a mano
         self._cargando_editor = False    # evita marcar dirty al cargar por codigo
         self._editor_plantillas: PlantillaEditorDialog | None = None
-        self._editor_formato: FormatoDialog | None = None
         self._comprobacion_inicial_hecha = False
         self._estado_actualizacion = U.ESTADO_INACTIVA
         self._ruta_update_lista: str | None = None
@@ -114,7 +112,6 @@ class MainWindow(QMainWindow):
         accion_deshacer_doc.setShortcut("Ctrl+Alt+Z")
         menu.addSeparator()
         menu.addAction("Editar plantillas…", self._abrir_editor_plantillas)
-        menu.addAction("Formato del documento…", self._abrir_formato)
         menu.addAction("Documentación opcional…", self._abrir_extras)
         menu.addSeparator()
         menu.addAction("Elegir carpeta de PDF…", self._elegir_carpeta_destino)
@@ -355,7 +352,7 @@ class MainWindow(QMainWindow):
         ly_d.addRow(fecha_widget)
 
         self.lbl_aviso_fecha = QLabel("")
-        self.lbl_aviso_fecha.setObjectName("infoFecha")
+        self.lbl_aviso_fecha.setObjectName("recordatorioInterno")
         self.lbl_aviso_fecha.setWordWrap(True)
         ly_d.addRow("", self.lbl_aviso_fecha)
 
@@ -367,13 +364,16 @@ class MainWindow(QMainWindow):
 
         gb_doc = QGroupBox("Documentos solicitados")
         ly_doc = QVBoxLayout(gb_doc)
-        pista_docs = QLabel("Doble clic para editar. Mueve la selección con ↑ y ↓.")
+        pista_docs = QLabel(
+            "Marca únicamente lo que quieras solicitar. Haz doble clic para editar un texto.")
         pista_docs.setObjectName("textoSuave")
+        pista_docs.setWordWrap(True)
         ly_doc.addWidget(pista_docs)
         self.lista_docs = QListWidget()
         self.lista_docs.setObjectName("listaDocumentos")
-        self.lista_docs.setMinimumHeight(120)
+        self.lista_docs.setMinimumHeight(168)
         self.lista_docs.setWordWrap(True)
+        self.lista_docs.setTextElideMode(Qt.ElideNone)
         self.lista_docs.setResizeMode(QListView.Adjust)
         self.lista_docs.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.lista_docs.setEditTriggers(
@@ -385,37 +385,26 @@ class MainWindow(QMainWindow):
         btn_anadir_doc = QPushButton("Añadir")
         btn_anadir_doc.setIcon(_icono("add"))
         btn_anadir_doc.clicked.connect(self._anadir_documento)
-        btn_quitar_doc = QPushButton("Quitar")
-        btn_quitar_doc.setIcon(_icono("remove"))
-        btn_quitar_doc.clicked.connect(self._quitar_documento)
-        btn_subir_doc = QToolButton()
-        btn_subir_doc.setIcon(_icono("arrow-up"))
-        btn_subir_doc.setAccessibleName("Subir documento")
-        btn_subir_doc.setToolTip("Subir documento")
-        btn_subir_doc.clicked.connect(lambda: self._mover_documento(-1))
-        btn_bajar_doc = QToolButton()
-        btn_bajar_doc.setIcon(_icono("arrow-down"))
-        btn_bajar_doc.setAccessibleName("Bajar documento")
-        btn_bajar_doc.setToolTip("Bajar documento")
-        btn_bajar_doc.clicked.connect(lambda: self._mover_documento(1))
         btn_reset = QPushButton("Restablecer")
         btn_reset.setIcon(_icono("refresh"))
         btn_reset.clicked.connect(self._reset_docs)
         fila_docs.addWidget(btn_anadir_doc)
-        fila_docs.addWidget(btn_quitar_doc)
-        fila_docs.addWidget(btn_subir_doc)
-        fila_docs.addWidget(btn_bajar_doc)
         fila_docs.addStretch(1)
         fila_docs.addWidget(btn_reset)
         ly_doc.addLayout(fila_docs)
 
         fila_extra_titulo = QHBoxLayout()
-        fila_extra_titulo.addWidget(QLabel("Bloques opcionales:"))
+        fila_extra_titulo.addWidget(QLabel("Documentación adicional (opcional)"))
         fila_extra_titulo.addStretch(1)
         btn_gestionar_extras = QPushButton("Gestionar…")
         btn_gestionar_extras.clicked.connect(self._abrir_extras)
         fila_extra_titulo.addWidget(btn_gestionar_extras)
         ly_doc.addLayout(fila_extra_titulo)
+        pista_extras = QLabel(
+            "Activa una casilla para añadir automáticamente ese bloque a la carta.")
+        pista_extras.setObjectName("textoSuave")
+        pista_extras.setWordWrap(True)
+        ly_doc.addWidget(pista_extras)
         self.contenedor_extras = QWidget()
         self.grid_extras = QGridLayout(self.contenedor_extras)
         self.grid_extras.setContentsMargins(0, 0, 0, 0)
@@ -425,14 +414,14 @@ class MainWindow(QMainWindow):
         col.addWidget(gb_doc)
 
         self.gb_notas = QGroupBox("Notas adicionales")
-        self.gb_notas.setCheckable(True)
-        self.gb_notas.setChecked(False)
         ly_n = QVBoxLayout(self.gb_notas)
         self.txt_notas = QPlainTextEdit()
-        self.txt_notas.setMaximumHeight(70)
+        self.txt_notas.setPlaceholderText(
+            "Escribe aquí una indicación especial para este cliente (opcional)…")
+        self.txt_notas.setMinimumHeight(74)
+        self.txt_notas.setMaximumHeight(92)
         self.txt_notas.textChanged.connect(self._al_cambiar_datos)
         ly_n.addWidget(self.txt_notas)
-        self.gb_notas.toggled.connect(self._al_cambiar_datos)
         col.addWidget(self.gb_notas)
         col.addStretch(1)
 
@@ -446,7 +435,7 @@ class MainWindow(QMainWindow):
         lay.setContentsMargins(14, 14, 14, 14)
 
         cab = QHBoxLayout()
-        self.lbl_titulo_documento = QLabel("Texto listo para enviar")
+        self.lbl_titulo_documento = QLabel("Vista previa PDF")
         self.lbl_titulo_documento.setObjectName("tituloSeccion")
         cab.addWidget(self.lbl_titulo_documento)
         cab.addStretch(1)
@@ -455,7 +444,7 @@ class MainWindow(QMainWindow):
         self.btn_modo_preview = QPushButton("Vista previa PDF")
         self.btn_modo_preview.setObjectName("segmento")
         self.btn_modo_preview.setCheckable(True)
-        self.btn_modo_editor = QPushButton("Texto")
+        self.btn_modo_editor = QPushButton("Editar contenido")
         self.btn_modo_editor.setObjectName("segmento")
         self.btn_modo_editor.setCheckable(True)
         self.grupo_modo.addButton(self.btn_modo_preview)
@@ -466,8 +455,7 @@ class MainWindow(QMainWindow):
         cab.addWidget(self.btn_modo_editor)
         lay.addLayout(cab)
         self.lbl_ayuda_documento = QLabel(
-            "Este es el texto plano que puedes copiar y pegar en WhatsApp o correo. "
-            "También puedes guardarlo como PDF.")
+            "Así quedará el PDF final, con cabecera, tipografía y pie de página.")
         self.lbl_ayuda_documento.setObjectName("textoSuave")
         lay.addWidget(self.lbl_ayuda_documento)
 
@@ -478,8 +466,7 @@ class MainWindow(QMainWindow):
         prev_lay = QVBoxLayout(prev_tab)
         prev_lay.setContentsMargins(0, 0, 0, 0)
         self.lbl_desborda = QLabel(
-            "⚠ El texto no cabe en una sola página. Acórtalo o reduce el "
-            "tamaño de letra desde Herramientas → Formato del documento.")
+            "⚠ El texto no cabe en una sola página. Acórtalo o elimina documentación que no sea necesaria.")
         self.lbl_desborda.setStyleSheet(
             "color:#8A2C0D; background:#FBE4D8; padding:6px; border-radius:4px;")
         self.lbl_desborda.setWordWrap(True)
@@ -518,21 +505,23 @@ class MainWindow(QMainWindow):
         self.editor.cursorPositionChanged.connect(self._sincronizar_barra_formato)
         doc_lay.addWidget(self.editor, 1)
 
-        pista = QLabel("El logo y el pie de página se añaden automáticamente al PDF. "
-                       "Puedes editar el texto libremente (líneas, espacios, negrita…).")
+        pista = QLabel("El logo, el pie, la fuente y el tamaño son corporativos. "
+                       "Puedes modificar el contenido, las listas y la alineación.")
         pista.setStyleSheet("color:#777; font-size:11px;")
         pista.setWordWrap(True)
         doc_lay.addWidget(pista)
 
         self.paginas_documento.addWidget(doc_tab)
-        self.paginas_documento.setCurrentIndex(1)
-        self.btn_modo_editor.setChecked(True)
+        self.paginas_documento.setCurrentIndex(0)
+        self.btn_modo_preview.setChecked(True)
         lay.addWidget(self.paginas_documento, 1)
         return contenedor
 
-    def _construir_barra_formato(self) -> QHBoxLayout:
-        barra = QHBoxLayout()
-        barra.setSpacing(4)
+    def _construir_barra_formato(self) -> QVBoxLayout:
+        barra = QVBoxLayout()
+        barra.setSpacing(5)
+        herramientas = QHBoxLayout()
+        herramientas.setSpacing(4)
 
         def boton(texto, tooltip, slot, checkable=False, icono=None):
             b = QToolButton()
@@ -543,7 +532,7 @@ class MainWindow(QMainWindow):
                 b.setIcon(_icono(icono))
             b.setCheckable(checkable)
             b.clicked.connect(slot)
-            barra.addWidget(b)
+            herramientas.addWidget(b)
             return b
 
         fb = QFont()
@@ -555,25 +544,43 @@ class MainWindow(QMainWindow):
         self.btn_cursiva = boton("C", "Cursiva (Ctrl+I)", self._fmt_cursiva, checkable=True)
         self.btn_cursiva.setFont(fi)
         boton("", "Lista con viñetas", self._fmt_lista, icono="list")
-        barra.addSpacing(10)
+        boton("", "Lista numerada", self._fmt_lista_numerada, icono="list-numbered")
+        herramientas.addSpacing(10)
         boton("", "Alinear a la izquierda", lambda: self.editor.setAlignment(Qt.AlignLeft),
               icono="align-left")
         boton("", "Centrar", lambda: self.editor.setAlignment(Qt.AlignHCenter),
               icono="align-center")
-        barra.addStretch(1)
+        boton("", "Justificar", lambda: self.editor.setAlignment(Qt.AlignJustify),
+              icono="align-justify")
+        herramientas.addSpacing(10)
+        boton("", "Deshacer (Ctrl+Z)", lambda: self.editor.undo(), icono="undo")
+        boton("", "Rehacer (Ctrl+Y)", lambda: self.editor.redo(), icono="redo")
+        herramientas.addStretch(1)
+
+        self.lbl_formato_corporativo = QLabel("Georgia · 10,5 pt · formato corporativo")
+        self.lbl_formato_corporativo.setObjectName("formatoBloqueado")
+        self.lbl_formato_corporativo.setToolTip(
+            "La fuente, el tamaño, el color y los espacios son iguales para todos los usuarios.")
+        herramientas.addWidget(self.lbl_formato_corporativo)
+        barra.addLayout(herramientas)
+
+        plantillas = QHBoxLayout()
+        plantillas.setSpacing(6)
+        plantillas.addStretch(1)
 
         self.btn_guardar_def = QPushButton("Guardar como predeterminado")
         self.btn_guardar_def.setToolTip(
             "Convierte este texto en el texto base para todos los futuros avisos "
             "de este tipo (los datos se seguirán rellenando solos)")
         self.btn_guardar_def.clicked.connect(self._guardar_como_predeterminado)
-        barra.addWidget(self.btn_guardar_def)
+        plantillas.addWidget(self.btn_guardar_def)
 
         self.btn_restaurar = QPushButton("Restaurar texto de la plantilla")
         self.btn_restaurar.setToolTip(
             "Vuelve al texto predefinido con los datos actuales del formulario")
         self.btn_restaurar.clicked.connect(self._restaurar_texto)
-        barra.addWidget(self.btn_restaurar)
+        plantillas.addWidget(self.btn_restaurar)
+        barra.addLayout(plantillas)
         return barra
 
     def _aplicar_modo_compacto(self, ancho: int) -> None:
@@ -625,7 +632,17 @@ class MainWindow(QMainWindow):
     def _documentos_actuales(self) -> list[str]:
         return [self.lista_docs.item(i).text().strip()
                 for i in range(self.lista_docs.count())
-                if self.lista_docs.item(i).text().strip()]
+                if (self.lista_docs.item(i).text().strip()
+                    and self.lista_docs.item(i).checkState() == Qt.Checked)]
+
+    def _estado_documentos(self) -> list[dict[str, object]]:
+        return [
+            {
+                "texto": self.lista_docs.item(i).text(),
+                "marcado": self.lista_docs.item(i).checkState() == Qt.Checked,
+            }
+            for i in range(self.lista_docs.count())
+        ]
 
     def _extras_etiquetas_marcadas(self) -> list[str]:
         return [etiqueta for etiqueta, boton in self._extra_buttons.items()
@@ -642,7 +659,7 @@ class MainWindow(QMainWindow):
             documentos=self._documentos_actuales(),
             documentos_extra=self._extras_marcados(),
             navidad=self.chk_navidad.isChecked(),
-            notas=self.txt_notas.toPlainText() if self.gb_notas.isChecked() else "",
+            notas=self.txt_notas.toPlainText(),
         )
 
     def _extras_marcados(self) -> list[tuple[str, list[str]]]:
@@ -705,16 +722,20 @@ class MainWindow(QMainWindow):
             if clave == "4T":
                 domic_2 = T.fecha_domiciliacion_cierre_tardio(anio).strftime("%d/%m/%Y")
                 general_2 = T.fecha_general_cierre_tardio(anio).strftime("%d/%m/%Y")
-                texto = (f"Retenciones: domic. {domic} · presentar {general}. "
-                         f"130/131/303/309: domic. {domic_2} · presentar {general_2}.")
+                texto = (f"RECORDATORIO INTERNO · Retenciones: domiciliar hasta {domic}; "
+                         f"presentar hasta {general}. Modelos 130/131/303/309: domiciliar "
+                         f"hasta {domic_2}; presentar hasta {general_2}.")
             else:
-                texto = f"Plazo fiscal orientativo: domiciliar {domic} · presentar {general}."
+                texto = (f"RECORDATORIO INTERNO · Domiciliar hasta {domic}. Si no se "
+                         f"domicilia: pagar mediante banco/NRC y presentar con certificado "
+                         f"digital hasta {general}.")
             if d != T.plazo_por_defecto(clave, anio):
                 texto = "Fecha de entrega personalizada. " + texto
         if aviso:
             texto += f" ⚠ {aviso}"
         self.lbl_aviso_fecha.setText(texto)
         self.lbl_aviso_fecha.setToolTip(
+            "Aviso interno: no aparece en la carta ni en el PDF. "
             "Fechas orientativas para los modelos trimestrales habituales. "
             "Conviene comprobar particularidades en el calendario oficial de la AEAT.")
 
@@ -732,7 +753,8 @@ class MainWindow(QMainWindow):
         self.lista_docs.clear()
         for texto in docs:
             item = QListWidgetItem(texto)
-            item.setFlags(item.flags() | Qt.ItemIsEditable)
+            item.setFlags(item.flags() | Qt.ItemIsEditable | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked)
             item.setToolTip(texto)
             self._ajustar_alto_documento(item)
             self.lista_docs.addItem(item)
@@ -742,7 +764,8 @@ class MainWindow(QMainWindow):
 
     def _anadir_documento(self) -> None:
         item = QListWidgetItem("Nuevo documento")
-        item.setFlags(item.flags() | Qt.ItemIsEditable)
+        item.setFlags(item.flags() | Qt.ItemIsEditable | Qt.ItemIsUserCheckable)
+        item.setCheckState(Qt.Checked)
         self._ajustar_alto_documento(item)
         self.lista_docs.addItem(item)
         self.lista_docs.setCurrentItem(item)
@@ -750,10 +773,12 @@ class MainWindow(QMainWindow):
         self._on_docs_editados()
 
     def _ajustar_alto_documento(self, item: QListWidgetItem) -> None:
-        ancho = max(self.lista_docs.viewport().width() - 26, 260)
+        # La casilla ocupa parte del ancho útil; reservarla evita que Qt
+        # recorte el texto con puntos suspensivos en paneles estrechos.
+        ancho = max(self.lista_docs.viewport().width() - 64, 220)
         alto = self.lista_docs.fontMetrics().boundingRect(
-            0, 0, ancho, 1000, Qt.TextWordWrap, item.text()).height() + 16
-        item.setSizeHint(QSize(0, max(72, alto)))
+            0, 0, ancho, 1000, Qt.TextWordWrap, item.text()).height() + 20
+        item.setSizeHint(QSize(0, max(56, alto)))
         item.setToolTip(item.text())
 
     def _quitar_documento(self) -> None:
@@ -768,7 +793,8 @@ class MainWindow(QMainWindow):
             return
         fila, texto = self._undo_documento
         item = QListWidgetItem(texto)
-        item.setFlags(item.flags() | Qt.ItemIsEditable)
+        item.setFlags(item.flags() | Qt.ItemIsEditable | Qt.ItemIsUserCheckable)
+        item.setCheckState(Qt.Checked)
         self._ajustar_alto_documento(item)
         self.lista_docs.insertItem(min(fila, self.lista_docs.count()), item)
         self.lista_docs.setCurrentItem(item)
@@ -798,20 +824,19 @@ class MainWindow(QMainWindow):
                 item.widget().deleteLater()
         self._extra_buttons.clear()
         for indice, extra in enumerate(sorted(X.cargar(), key=lambda e: e.etiqueta.lower())):
-            boton = QToolButton()
-            boton.setObjectName("etiquetaOpcional")
+            boton = QCheckBox()
+            boton.setObjectName("casillaOpcional")
             boton.setText(extra.etiqueta)
-            boton.setCheckable(True)
             boton.setChecked(extra.etiqueta in marcados)
             resumen = (f"{extra.intro}\n" if extra.intro else "") + "\n".join(f"• {ln}" for ln in extra.lineas)
             boton.setToolTip(resumen)
             boton.toggled.connect(self._on_extra_marcado)
             self._extra_buttons[extra.etiqueta] = boton
-            self.grid_extras.addWidget(boton, indice // 2, indice % 2)
+            self.grid_extras.addWidget(boton, indice, 0)
         if not self._extra_buttons:
             vacio = QLabel("Aún no hay bloques opcionales guardados")
             vacio.setObjectName("textoSuave")
-            self.grid_extras.addWidget(vacio, 0, 0, 1, 2)
+            self.grid_extras.addWidget(vacio, 0, 0)
 
     def _desmarcar_extras(self) -> None:
         for boton in self._extra_buttons.values():
@@ -1021,9 +1046,10 @@ class MainWindow(QMainWindow):
             "anio": self.spin_anio.value(),
             "fecha_limite": qd.toString(Qt.ISODate),
             "documentos": self._documentos_actuales(),
+            "documentos_estado": self._estado_documentos(),
             "extras": self._extras_etiquetas_marcadas(),
             "navidad": self.chk_navidad.isChecked(),
-            "notas_activas": self.gb_notas.isChecked(),
+            "notas_activas": bool(self.txt_notas.toPlainText().strip()),
             "notas": self.txt_notas.toPlainText(),
             "editor_html": self.editor.toHtml(),
             "editor_dirty": self._editor_dirty,
@@ -1063,9 +1089,19 @@ class MainWindow(QMainWindow):
                 bloqueado = campo.blockSignals(True)
                 campo.setText(str(valor))
                 campo.blockSignals(bloqueado)
-            documentos = datos.get("documentos")
-            if isinstance(documentos, list):
-                self._set_docs([str(x) for x in documentos])
+            documentos_estado = datos.get("documentos_estado")
+            if isinstance(documentos_estado, list) and documentos_estado:
+                textos = [str(x.get("texto", "")) for x in documentos_estado
+                          if isinstance(x, dict) and str(x.get("texto", "")).strip()]
+                self._set_docs(textos)
+                for indice, estado in enumerate(documentos_estado):
+                    if indice < self.lista_docs.count() and isinstance(estado, dict):
+                        self.lista_docs.item(indice).setCheckState(
+                            Qt.Checked if estado.get("marcado", True) else Qt.Unchecked)
+            else:
+                documentos = datos.get("documentos")
+                if isinstance(documentos, list):
+                    self._set_docs([str(x) for x in documentos])
             self._refrescar_lista_extras()
             extras = datos.get("extras", [])
             for etiqueta in extras if isinstance(extras, list) else []:
@@ -1074,9 +1110,6 @@ class MainWindow(QMainWindow):
             bloqueado = self.chk_navidad.blockSignals(True)
             self.chk_navidad.setChecked(bool(datos.get("navidad", False)))
             self.chk_navidad.blockSignals(bloqueado)
-            bloqueado = self.gb_notas.blockSignals(True)
-            self.gb_notas.setChecked(bool(datos.get("notas_activas", False)))
-            self.gb_notas.blockSignals(bloqueado)
             bloqueado = self.txt_notas.blockSignals(True)
             self.txt_notas.setPlainText(str(datos.get("notas", "")))
             self.txt_notas.blockSignals(bloqueado)
@@ -1116,6 +1149,10 @@ class MainWindow(QMainWindow):
         self.editor.textCursor().createList(QTextListFormat.ListDisc)
         self.editor.setFocus()
 
+    def _fmt_lista_numerada(self) -> None:
+        self.editor.textCursor().createList(QTextListFormat.ListDecimal)
+        self.editor.setFocus()
+
     def _sincronizar_barra_formato(self) -> None:
         self.btn_negrita.setChecked(self.editor.fontWeight() > QFont.Normal)
         self.btn_cursiva.setChecked(self.editor.fontItalic())
@@ -1134,13 +1171,13 @@ class MainWindow(QMainWindow):
     def _mostrar_modo(self, indice: int) -> None:
         self.paginas_documento.setCurrentIndex(indice)
         self.lbl_titulo_documento.setText(
-            "Vista previa PDF" if indice == 0 else "Texto listo para enviar")
+            "Vista previa PDF" if indice == 0 else "Contenido del aviso")
         self.btn_modo_preview.setChecked(indice == 0)
         self.btn_modo_editor.setChecked(indice == 1)
         self.lbl_ayuda_documento.setText(
             "Así quedará el PDF final, con cabecera, tipografía y pie de página."
             if indice == 0 else
-            "Edita el texto y cópialo en WhatsApp o correo; el PDF conservará el formato.")
+            "Edita el contenido; el formato corporativo será igual para todos los usuarios.")
         if indice == 0:
             self._actualizar_preview()
 
@@ -1386,7 +1423,6 @@ class MainWindow(QMainWindow):
             if etiqueta in self._extra_buttons:
                 self._extra_buttons[etiqueta].setChecked(True)
         self.chk_navidad.setChecked(entrada.navidad)
-        self.gb_notas.setChecked(bool(entrada.notas))
         self.txt_notas.setPlainText(entrada.notas)
         self._actualizar_fecha_desde_periodo()
 
@@ -1410,15 +1446,8 @@ class MainWindow(QMainWindow):
         self._editor_plantillas.raise_()
         self._editor_plantillas.activateWindow()
 
-    def _abrir_formato(self) -> None:
-        if self._editor_formato is None or not self._editor_formato.isVisible():
-            self._editor_formato = FormatoDialog(self, on_cambio=self._al_cambiar_desde_dialogo)
-        self._editor_formato.show()
-        self._editor_formato.raise_()
-        self._editor_formato.activateWindow()
-
     def _al_cambiar_desde_dialogo(self) -> None:
-        """Cambio hecho en el editor de plantillas o de formato: si el texto
+        """Cambio hecho en el editor de plantillas: si el texto
         no se ha tocado a mano, se reescribe con lo nuevo; si se ha editado,
         se deja como esta (para no perder los cambios) y solo se avisa."""
         if self._editor_dirty:
