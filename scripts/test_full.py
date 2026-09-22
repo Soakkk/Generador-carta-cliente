@@ -288,12 +288,16 @@ check("fecha general nunca cae en sabado/domingo/festivo",
       d_general.weekday() < 5 and not T.es_festivo(d_general))
 check("plazo_por_defecto usa la domiciliacion", T.plazo_por_defecto("1T", 2026) == d_domicilio)
 
-# --- 4T vence el dia 30 de enero (no el 20), verificado contra el calendario oficial AEAT ---
+# --- 4T tiene dos grupos de vencimientos en el calendario oficial AEAT ---
 d_general_4t = T.fecha_general_periodo("4T", 2025)   # 4T de 2025 se presenta en enero de 2026
 d_domicilio_4t = T.fecha_domiciliacion_periodo("4T", 2025)
-check("4T vence el 30 de enero (oficial AEAT 2026)", d_general_4t == _dt.date(2026, 1, 30))
-check("domiciliacion 4T enero 2026 es el 27 (oficial AEAT: 3 dias habiles, sin fin de semana de por medio)",
-      d_domicilio_4t == _dt.date(2026, 1, 27))
+check("retenciones 4T vencen el 20 de enero", d_general_4t == _dt.date(2026, 1, 20))
+check("domiciliacion de retenciones 4T termina el 15 de enero",
+      d_domicilio_4t == _dt.date(2026, 1, 15))
+check("130/131/303/309 del 4T vencen el 30 de enero",
+      T.fecha_general_cierre_tardio(2025) == _dt.date(2026, 1, 30))
+check("domiciliacion 130/131/303/309 del 4T termina el 27 de enero",
+      T.fecha_domiciliacion_cierre_tardio(2025) == _dt.date(2026, 1, 27))
 
 # --- regresion critica: el tamano de letra debe escalar con el DPI real ---
 # (antes, el cuerpo del texto salia correcto en la vista previa pero
