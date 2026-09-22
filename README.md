@@ -43,10 +43,10 @@ periodo, año, fecha límite, nombre del cliente y la lista de documentos.
   Al guardarlo se reinsertan automáticamente los comodines de cliente, periodo y fecha, de
   modo que esos datos se siguen rellenando solos; las listas y la tabla de plazos también
   se conservan como comodines. Se puede revisar/deshacer en Editar plantillas.
-- **Documentación opcional reutilizable**: bloques de documentos con nombre (p. ej. «Venta
-  de bienes inmuebles»), con una frase introductoria opcional y su propia lista, que se
-  añaden o quitan con un clic en cualquier tipo de aviso. Se insertan como su propio
-  párrafo y su propia lista (no se mezclan con la lista de documentos base). Se gestionan
+- **Documentos mediante casillas**: la lista principal permite marcar únicamente lo que se
+  solicitará, sin tener que borrar textos. Incluye un catálogo inicial de documentación
+  adicional (alquiler, profesionales con retención, operaciones intracomunitarias,
+  importaciones/exportaciones y extractos bancarios), también mediante casillas y ampliable
   desde Herramientas → Documentación opcional.
 - **Vista previa del PDF** como vista principal, idéntica al PDF final, con acceso
   directo a la edición de contenido y aviso visible si el texto no cabe en una
@@ -62,9 +62,14 @@ periodo, año, fecha límite, nombre del cliente y la lista de documentos.
   acceso al PDF y acción «Crear otro igual» para recuperar los datos y el texto
   exactos del aviso guardado.
 - **Editor de plantillas** para cambiar los textos desde la propia aplicación, sin tocar código.
-- **Formato del documento** (Herramientas → Formato del documento…): fuente, tamaño de letra,
-  interlineado y espacio entre párrafos configurables al estilo Word, con vista previa en
-  vivo. Se guarda y se aplica a todos los avisos futuros.
+- **Formato corporativo bloqueado**: Georgia 10,5 pt, párrafos justificados y listas alineadas
+  a la izquierda. El editor permite cambiar contenido, negrita, cursiva, listas y alineación,
+  pero no crear diferencias de tipografía o color entre usuarios.
+- **Recordatorio fiscal interno destacado**: muestra en rojo las fechas de domiciliación y
+  presentación, junto con el recordatorio de banco/NRC y certificado digital. Nunca se
+  incorpora a la carta ni al PDF del cliente.
+- **Notas siempre disponibles**: el campo es directamente editable; dejarlo vacío basta para
+  no añadir ninguna nota al aviso.
 - **Generar y guardar PDF** recuerda la carpeta elegida. Tras generarlo permite
   abrir el PDF, abrir la carpeta o conservar los datos y cambiar solo de cliente.
 - **Comprobación de actualizaciones** contra los releases de GitHub (automática al abrir,
@@ -90,12 +95,10 @@ cuenta para estos cálculos.
 
 ## Estética / manual de estilo
 
-Todo lo que define el estilo está centralizado en [`avisos/config.py`](avisos/config.py):
-colores (verde `#2E4A3C`, dorado `#B8995A`) y datos del pie de página. La tipografía
-(fuente, tamaño, interlineado y espacio entre párrafos) se guarda aparte, en
-[`avisos/estilo.py`](avisos/estilo.py) (`%APPDATA%\AvisosEMarin\estilo.json`), y es
-configurable por el usuario desde Herramientas → Formato del documento. Por defecto es
-**Georgia** (fuente estándar de Windows); se descartó una fuente variable incrustada
+Todo lo que define el estilo está centralizado en [`avisos/config.py`](avisos/config.py) y
+[`avisos/estilo.py`](avisos/estilo.py): colores, datos del pie, tipografía, tamaño,
+interlineado y espacios. El formato no se guarda por usuario: todos los equipos utilizan
+**Georgia 10,5 pt** y la misma composición. Se descartó una fuente variable incrustada
 porque algunas exportan mal el grosor —todo en negrita— al generar el PDF, aunque en
 pantalla se vieran bien.
 
@@ -146,7 +149,7 @@ AvisosClientes/
 │  ├─ config.py      # manual de estilo: colores, datos fijos, rutas
 │  ├─ templates.py   # plantillas, motor de sustitución y overrides editables
 │  ├─ render.py      # composición y export a PDF / vista previa
-│  ├─ estilo.py      # fuente/tamaño/interlineado configurables (JSON)
+│  ├─ estilo.py      # fuente/tamaño/interlineado corporativos y fijos
 │  ├─ clients.py     # base de datos de clientes (JSON)
 │  ├─ history.py     # historial de avisos generados (JSON)
 │  ├─ util.py        # nombre de archivo sugerido

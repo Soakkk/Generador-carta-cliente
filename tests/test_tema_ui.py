@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QImage, QKeySequence
 from PySide6.QtWidgets import QApplication
 
@@ -116,7 +117,40 @@ def test_ayuda_cambia_entre_texto_y_vista_previa(win):
     win._mostrar_modo(0)
     assert "PDF final" in win.lbl_ayuda_documento.text()
     win._mostrar_modo(1)
-    assert "WhatsApp" in win.lbl_ayuda_documento.text()
+    assert "formato corporativo" in win.lbl_ayuda_documento.text()
+    assert win.lbl_titulo_documento.text() == "Contenido del aviso"
+
+
+def test_documentos_se_eligen_con_casillas_y_se_conserva_la_lista(win):
+    assert win.lista_docs.count() >= 3
+    assert all(win.lista_docs.item(i).checkState() == Qt.Checked
+               for i in range(win.lista_docs.count()))
+    descartado = win.lista_docs.item(1).text()
+    win.lista_docs.item(1).setCheckState(Qt.Unchecked)
+    assert descartado not in win._documentos_actuales()
+    assert "<ul" in templates.render_cuerpo(win._contexto(), win._plantilla_actual())
+
+
+def test_notas_siempre_editables_y_formato_corporativo_visible(win):
+    assert not win.gb_notas.isCheckable()
+    assert win.txt_notas.isEnabled()
+    win.txt_notas.setPlainText("Indicación especial")
+    assert win._contexto().notas == "Indicación especial"
+    assert "Georgia" in win.lbl_formato_corporativo.text()
+
+
+def test_recordatorio_fiscal_es_interno_y_visible(win):
+    assert win.lbl_aviso_fecha.objectName() == "recordatorioInterno"
+    assert "RECORDATORIO INTERNO" in win.lbl_aviso_fecha.text()
+    assert "certificado digital" in win.lbl_aviso_fecha.text()
+
+
+def test_parrafos_justificados_sin_justificar_las_listas():
+    from avisos import estilo, render
+
+    estilo_css = render.stylesheet(estilo.Estilo())
+    assert "text-align:justify" in estilo_css
+    assert "li{" in estilo_css and "text-align:left" in estilo_css
 
 
 def test_restaurar_borrador_actualiza_la_ayuda_de_fecha(win):

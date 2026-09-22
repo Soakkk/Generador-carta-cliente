@@ -1,16 +1,17 @@
-"""Formato del documento (fuente, tamano e interlineado), configurable
-por el usuario al estilo Word y guardado para que se aplique a todos los
-avisos futuros."""
+"""Formato corporativo único para todos los avisos.
+
+El contenido puede editarse, pero la tipografía, el tamaño y los espacios
+no dependen del ordenador ni del usuario. Así todos los PDF de la asesoría
+mantienen exactamente la misma identidad visual.
+"""
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-
-from . import config
+from dataclasses import dataclass
 
 FUENTE_DEF = "Georgia"
-TAMANO_CUERPO_DEF = 11.0
-INTERLINEADO_DEF = 120.0   # porcentaje
-ESPACIO_PARRAFO_DEF = 8.0  # puntos
+TAMANO_CUERPO_DEF = 10.5
+INTERLINEADO_DEF = 115.0   # porcentaje
+ESPACIO_PARRAFO_DEF = 6.0  # puntos
 
 
 @dataclass
@@ -21,23 +22,15 @@ class Estilo:
     espacio_parrafo: float = ESPACIO_PARRAFO_DEF
 
 
-def _ruta():
-    return config.config_dir() / "estilo.json"
-
-
 def cargar() -> Estilo:
-    datos = config.leer_json(_ruta(), None)
-    try:
-        return Estilo(**datos) if datos else Estilo()
-    except Exception:
-        return Estilo()
+    """Devuelve siempre el estilo corporativo, idéntico en todos los equipos."""
+    return Estilo()
 
 
 def guardar(estilo: Estilo) -> None:
-    config.escribir_json(_ruta(), asdict(estilo))
+    """Compatibilidad con versiones anteriores: el estilo ya no se personaliza."""
+    return None
 
 
 def restablecer() -> Estilo:
-    estilo = Estilo()
-    guardar(estilo)
-    return estilo
+    return Estilo()

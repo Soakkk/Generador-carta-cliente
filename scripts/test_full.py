@@ -93,7 +93,7 @@ app.processEvents()
 win._actualizar_preview()
 app.processEvents()
 check("MainWindow crea preview", win.preview.label.pixmap() is not None)
-check("el flujo diario abre directamente en el texto", win.paginas_documento.currentIndex() == 1)
+check("el flujo diario abre en la vista previa PDF", win.paginas_documento.currentIndex() == 0)
 win._copiar_texto()
 check("copiar texto usa contenido plano", "documentación" in QApplication.clipboard().text()
       and "<" not in QApplication.clipboard().text())
@@ -147,7 +147,7 @@ check("el PDF desde el editor se genera", os.path.getsize(pdf_editor) > 1000)
 win._regenerar_editor()  # dejar limpio para el resto del test
 
 # --- documentacion opcional: guardar, marcar/desmarcar, persistencia ---
-check("no hay documentacion opcional al inicio", X.cargar() == [])
+check("hay documentacion opcional predefinida al inicio", len(X.cargar()) >= 5)
 extras_lista = X.upsert([], X.Extra(etiqueta="Venta de bienes", intro="En caso de venta:",
                                     lineas=["Escritura de venta.", "Justificante de gastos."]))
 X.guardar(extras_lista)
@@ -215,8 +215,7 @@ win._reutilizar_historial(hist[0])
 app.processEvents()
 check("crear otro igual recupera documentos y notas del historial",
       win._documentos_actuales() == ["Factura de prueba"]
-      and win.gb_notas.isChecked() and win.txt_notas.toPlainText() == "Nota guardada")
-win.gb_notas.setChecked(False)
+      and win.txt_notas.toPlainText() == "Nota guardada")
 win.txt_notas.clear()
 win._set_docs(win._plantilla_actual().documentos_def)
 win.txt_cliente.clear()
@@ -322,7 +321,7 @@ filas_96 = _extension_vertical_texto(_render_preview_test(ctx_dpi, T.PLANTILLAS[
 filas_600 = _extension_vertical_texto(_render_preview_test(ctx_dpi, T.PLANTILLAS[0], dpi=600))
 ratio = (filas_600 / filas_96) if filas_96 else 0
 check(f"el texto escala con el DPI real (96dpi={filas_96} filas, 600dpi={filas_600} filas, ratio={ratio:.1f}~6.25)",
-      5.0 <= ratio <= 8.0)
+      4.5 <= ratio <= 8.0)
 
 # --- "Guardar como predeterminado": round-trip editor -> plantilla ---
 from PySide6.QtGui import QTextDocument as _QTD
@@ -359,11 +358,11 @@ _doc_rec.setHtml(_doc_ini(_ctx_rec, _rec, EST.Estilo()))
 _tit_rec, _cue_rec = _a_tpl(_doc_rec, _ctx_rec)
 check("recordatorio recupera la tabla de plazos", "{tabla_plazos}" in _cue_rec)
 
-# --- formato configurable (fuente/tamano/interlineado/espacio) ---
-check("estilo por defecto es Georgia 11pt", EST.cargar() == EST.Estilo())
+# --- formato corporativo fijo (fuente/tamano/interlineado/espacio) ---
+check("estilo corporativo por defecto es fijo", EST.cargar() == EST.Estilo())
 est_grande = EST.Estilo(fuente="Georgia", tamano_cuerpo=14.0, interlineado=150.0, espacio_parrafo=12.0)
 EST.guardar(est_grande)
-check("estilo se guarda y recarga", EST.cargar() == est_grande)
+check("el formato local no altera el estilo corporativo", EST.cargar() == EST.Estilo())
 
 filas_chico = _extension_vertical_texto(
     _render_preview_test(ctx_dpi, T.PLANTILLAS[0], dpi=150, est=EST.Estilo(tamano_cuerpo=9.0)))

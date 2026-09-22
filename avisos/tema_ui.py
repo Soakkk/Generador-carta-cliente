@@ -24,6 +24,7 @@ WARNING = "#86500A"
 DANGER = "#B43737"
 FUENTE_UI = '"Segoe UI Variable", "Segoe UI", sans-serif'
 CHEVRON = config.asset("chevron-down.svg").as_posix()
+CHECK_ICON = config.asset("icons", "check-white.svg").as_posix()
 
 # Alias conservados para extensiones antiguas de la aplicación.
 NAVY = ACCENT
@@ -58,9 +59,9 @@ QWidget#panelFormulario {{ background: transparent; border: none; }}
 QWidget#panelDocumento {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 10px; }}
 QLabel#tituloSeccion {{ color: {INK}; font-size: 17px; font-weight: 600; }}
 QLabel#textoSuave {{ color: {MUTED}; font-size: 11px; }}
-QLabel#infoFecha {{
-    color: {MUTED}; font-size: 11px; background: {ACCENT_FAINT};
-    border: 1px solid {BORDER}; border-radius: 6px; padding: 7px 9px;
+QLabel#infoFecha, QLabel#recordatorioInterno {{
+    color: {DANGER}; font-size: 11px; font-weight: 700; background: #FFF0F0;
+    border: 1px solid #E7A5A5; border-radius: 6px; padding: 9px 10px;
 }}
 
 QGroupBox {{
@@ -107,14 +108,29 @@ QComboBox::down-arrow {{ image: url("{CHEVRON}"); width: 12px; height: 8px; }}
 QComboBox QAbstractItemView::item {{ min-height: 32px; padding: 7px 10px; }}
 QPushButton#segmento {{ border-radius: 5px; padding: 7px 10px; background: {SOFT}; }}
 QPushButton#segmento:checked {{ background: {ACCENT}; color: white; border-color: {ACCENT}; }}
-QToolButton#etiquetaOpcional {{ padding: 7px 10px; text-align: left; background: {SOFT}; }}
-QToolButton#etiquetaOpcional:checked {{
+QCheckBox#casillaOpcional {{
+    background: {SOFT}; border: 1px solid {BORDER}; border-radius: 6px;
+    padding: 8px 10px; spacing: 9px; font-weight: 500;
+}}
+QCheckBox#casillaOpcional:hover {{ border-color: {ACCENT}; background: {ACCENT_FAINT}; }}
+QCheckBox#casillaOpcional:checked {{
     background: #E7F5EE; color: {SUCCESS}; border-color: {SUCCESS};
 }}
+QCheckBox#casillaOpcional::indicator {{
+    width: 15px; height: 15px; background: {CARD}; border: 1px solid #9FB1C3;
+    border-radius: 3px;
+}}
+QCheckBox#casillaOpcional::indicator:checked {{
+    background: {ACCENT}; border-color: {ACCENT}; image: url("{CHECK_ICON}");
+}}
 
-QListWidget#listaDocumentos::item {{ padding: 7px 5px; border-bottom: 1px solid {BORDER}; }}
+QListWidget#listaDocumentos::item {{ padding: 6px 5px; border-bottom: 1px solid {BORDER}; }}
 QListWidget#listaDocumentos::item:selected {{ background: {ACCENT_FAINT}; color: {INK}; }}
 QTextEdit#editorDocumento {{ padding: 22px; }}
+QLabel#formatoBloqueado {{
+    color: {MUTED}; background: {SOFT}; border: 1px solid {BORDER};
+    border-radius: 6px; padding: 6px 9px; font-size: 11px;
+}}
 QTabWidget::pane {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 8px; }}
 QTabBar::tab {{
     background: {PAGE}; color: {MUTED}; border: 1px solid {BORDER};

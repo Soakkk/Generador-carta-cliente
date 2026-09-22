@@ -25,13 +25,13 @@ from .templates import Contexto, Plantilla, render_cuerpo, render_titulo
 # A4 en mm
 A4_W_MM, A4_H_MM = 210.0, 297.0
 # Margenes (mm)
-MARGEN_X = 20.0
-MARGEN_SUP = 16.0
+MARGEN_X = 18.0
+MARGEN_SUP = 13.0
 MARGEN_INF = 16.0
 
 # Tamanos del titulo y el pie como diferencia respecto al tamano de cuerpo
 # (configurable), para que todo escale de forma proporcional.
-DELTA_TITULO = 4.5
+DELTA_TITULO = 3.5
 DELTA_PIE_NEGRITA = -2.0
 DELTA_PIE_NORMAL = -2.5
 
@@ -42,8 +42,8 @@ def _mm(px_per_mm: float, mm: float) -> float:
 def stylesheet(est: E.Estilo) -> str:
     return (
         f"p{{color:{config.INK};line-height:{est.interlineado}%;"
-        f"margin:{est.espacio_parrafo}pt 0;}}"
-        f"li{{color:{config.INK};margin:2pt 0;}}"
+        f"margin:{est.espacio_parrafo}pt 0;text-align:justify;}}"
+        f"li{{color:{config.INK};margin:1pt 0;text-align:left;}}"
         f"b{{color:{config.GREEN_SOFT};}}"
     )
 
@@ -54,7 +54,7 @@ def componer_documento(titulo: str, cuerpo_html: str, est: E.Estilo) -> str:
     title_pt = est.tamano_cuerpo + DELTA_TITULO
     titulo_html = (
         f'<p align="center" style="font-size:{title_pt:.1f}pt;font-weight:bold;'
-        f'color:{config.GREEN};margin-bottom:14pt;">{escape(titulo)}</p>'
+        f'color:{config.GREEN};text-align:center;margin-bottom:11pt;">{escape(titulo)}</p>'
     )
     return titulo_html + cuerpo_html
 
@@ -69,7 +69,7 @@ def aplicar_margenes_bloques(doc: QTextDocument, est: E.Estilo) -> None:
     asi que hay que fijarlo por codigo para que el EDITOR muestre el mismo
     espaciado que el PDF y sea de verdad WYSIWYG."""
     espacio = est.espacio_parrafo * _PT_A_PX
-    titulo_gap = 14.0 * _PT_A_PX
+    titulo_gap = 11.0 * _PT_A_PX
     primero_visto = False
     prev_lista = False
     block = doc.begin()
@@ -133,15 +133,15 @@ def pintar_documento(painter: QPainter, ancho_px: float, alto_px: float,
     # --- Logo (centrado) ---
     logo = QImage(str(config.logo_path()))
     if not logo.isNull():
-        target_w = content_w * 0.56
+        target_w = content_w * 0.48
         escala = logo.scaledToWidth(int(target_w), Qt.SmoothTransformation)
         lx = (ancho_px - escala.width()) / 2.0
         painter.drawImage(QRectF(lx, y, escala.width(), escala.height()), escala)
-        y += escala.height() + _mm(ppm, 5)
+        y += escala.height() + _mm(ppm, 3)
 
     # --- Linea dorada ---
     painter.fillRect(QRectF(x0, y, content_w, _mm(ppm, 0.7)), QColor(config.GOLD))
-    y += _mm(ppm, 7)
+    y += _mm(ppm, 5)
 
     # --- Pie de pagina: se calcula antes para saber el hueco disponible ---
     pie_y = alto_px - _mm(ppm, MARGEN_INF) - _mm(ppm, 13)
