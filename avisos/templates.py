@@ -231,7 +231,7 @@ TEXTO_NAVIDAD_DEF = (
 DOCS_TRIMESTRE = [
     "Facturas de ingresos y gastos, emitidas y recibidas, correspondientes al trimestre.",
     "Facturas o justificantes pendientes de trimestres anteriores, si quedara alguno por entregar.",
-    "Facturas y documentación de compra o venta de bienes de inversión, si ha realizado alguna operación de este tipo.",
+    "Si durante el trimestre ha comprado o vendido algún bien de inversión, las facturas y demás documentación relacionada con la operación.",
 ]
 
 DOCS_CIERRE = [
@@ -272,7 +272,7 @@ Para preparar los impuestos del *{periodo} de {anio}*, necesitamos que nos enví
 
 Por favor, envíenos la documentación *antes del {fecha_limite}* para que podamos revisarla y presentar los impuestos dentro de plazo.
 
-Muchas gracias. Quedamos a su disposición para cualquier consulta.""",
+Muchas gracias por su colaboración. Como siempre, quedamos a su disposición para cualquier consulta.""",
     ),
     Plantilla(
         id="recordatorio",
@@ -367,6 +367,54 @@ def _overrides_validos(datos: object) -> bool:
     )
 
 
+_CUERPOS_SOLICITUD_ANTERIORES = (
+    """Estimado/a {cliente}:
+
+Para preparar los impuestos del *{periodo} de {anio}*, necesitamos que nos envíe la siguiente documentación:
+
+{documentos}
+
+{notas}
+
+Por favor, envíenos la documentación *antes del {fecha_limite}* para que podamos revisarla y presentar los impuestos dentro de plazo.
+
+Muchas gracias. Quedamos a su disposición para cualquier consulta.""",
+    """Estimado/a {cliente}:
+
+Para preparar los impuestos del *{periodo} de {anio}*, necesitamos que nos envíe la siguiente documentación:
+
+{documentos}
+
+Por favor, envíenos la documentación *antes del {fecha_limite}* para que podamos revisarla y presentar los impuestos dentro de plazo.
+
+Muchas gracias.
+
+Quedamos a su disposición para cualquier consulta.""",
+)
+
+
+def _normalizar_plantilla(texto: str) -> str:
+    return " ".join(texto.split())
+
+
+def _migrar_solicitud_anterior(datos: dict[str, dict[str, str]]) -> bool:
+    """Retira solo las personalizaciones idénticas a la redacción anterior.
+
+    De este modo la nueva redacción llega también a equipos que guardaron el
+    antiguo texto como predeterminado, sin borrar plantillas realmente propias.
+    """
+    anterior = datos.get("solicitud_trim")
+    if not anterior:
+        return False
+    plantilla = por_id("solicitud_trim")
+    cuerpos = {_normalizar_plantilla(x) for x in _CUERPOS_SOLICITUD_ANTERIORES}
+    if (anterior.get("titulo") == plantilla.titulo_tpl
+            and _normalizar_plantilla(anterior.get("cuerpo", "")) in cuerpos):
+        del datos["solicitud_trim"]
+        return True
+    return False
+
+
 def _overrides() -> dict[str, dict[str, str]]:
     global _overrides_cache
     if _overrides_cache is None:
@@ -374,6 +422,8 @@ def _overrides() -> dict[str, dict[str, str]]:
             _overrides_path(), {}, copias=3, validar=_overrides_validos
         )
         _overrides_cache = datos if isinstance(datos, dict) else {}
+        if _migrar_solicitud_anterior(_overrides_cache):
+            _guardar_overrides()
     return _overrides_cache
 
 

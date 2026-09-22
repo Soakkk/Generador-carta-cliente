@@ -24,7 +24,7 @@ from avisos.estilo import Estilo
 
 
 TEXT_SHA256 = {
-    "solicitud_trim": "5acb6602d5beec56de79e3d8172ff093910e3c74c8c1f6b9b62ee88a6ba04303",
+    "solicitud_trim": "bf89a4e70eb573752d1c42bcb882d9394545f894f5ff5ef982a15b75defa3668",
     "recordatorio": "69abd1dc9f2c8e1f9a3d3c91803f14c8b6b9d67bda82ca34c325df449317beff",
     "cierre_anual": "b8bc85ea940a1d5df7d0c3c6a35a1de097d9e53d6026b6ddafab25f463b87a87",
     "renta_arrend": "0871b54c9199b7c17ea5ef20d88449bee439c690e70d55de1cbe98a251e5e68d",

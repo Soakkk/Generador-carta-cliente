@@ -208,6 +208,37 @@ def test_plantillas_json_semanticamente_invalidas_usan_backup(entorno, monkeypat
     assert templates.cuerpo_tpl_activo(plantilla) == "Cuerpo válido"
 
 
+def test_redaccion_anterior_guardada_migra_a_la_nueva(entorno, monkeypatch):
+    plantilla = templates.por_id("solicitud_trim")
+    ruta = templates._overrides_path()
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_text(
+        '{"solicitud_trim":{"titulo":"Solicitud de documentación — {periodo} de {anio}",'
+        '"cuerpo":"Estimado/a {cliente}:\\n\\nPara preparar los impuestos del '
+        '*{periodo} de {anio}*, necesitamos que nos envíe la siguiente documentación:'
+        '\\n\\n{documentos}\\n\\nPor favor, envíenos la documentación '
+        '*antes del {fecha_limite}* para que podamos revisarla y presentar los impuestos '
+        'dentro de plazo.\\n\\nMuchas gracias.\\n\\nQuedamos a su disposición para '
+        'cualquier consulta."}}',
+        "utf-8",
+    )
+    monkeypatch.setattr(templates, "_overrides_cache", None)
+
+    assert templates.cuerpo_tpl_activo(plantilla) == plantilla.cuerpo_tpl
+    assert "solicitud_trim" not in templates._overrides()
+
+
+def test_solicitud_trimestral_usa_la_redaccion_aprobada(entorno):
+    plantilla = templates.por_id("solicitud_trim")
+    assert plantilla.documentos_def[0] == (
+        "Facturas de ingresos y gastos, emitidas y recibidas, correspondientes al trimestre."
+    )
+    assert plantilla.documentos_def[2].startswith(
+        "Si durante el trimestre ha comprado o vendido algún bien de inversión"
+    )
+    assert "Muchas gracias por su colaboración. Como siempre" in plantilla.cuerpo_tpl
+
+
 def test_eliminacion_de_documento_se_puede_deshacer(entorno, qapp):
     win = MainWindow()
     win._set_docs(["Primero", "Segundo", "Tercero"])
