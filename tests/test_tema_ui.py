@@ -101,6 +101,22 @@ def test_estados_qt_incluyen_foco_disabled_error_y_scrollbars():
         "QTableWidget",
     ):
         assert selector in tema_ui.QSS
+    assert "width: 14px" in tema_ui.QSS
+    assert "min-height: 48px" in tema_ui.QSS
+
+
+def test_formulario_abre_arriba_e_iconos_principales_cargan(win, qapp):
+    qapp.processEvents()
+    assert win.form_scroll.verticalScrollBar().value() == 0
+    for boton in (win.btn_copiar, win.btn_pdf, win.btn_siguiente, win.btn_carpeta):
+        assert not boton.icon().isNull()
+
+
+def test_ayuda_cambia_entre_texto_y_vista_previa(win):
+    win._mostrar_modo(0)
+    assert "PDF final" in win.lbl_ayuda_documento.text()
+    win._mostrar_modo(1)
+    assert "WhatsApp" in win.lbl_ayuda_documento.text()
 
 
 def test_icono_comparte_rombo_azul_carta_blanca_y_acento_dorado(qapp):

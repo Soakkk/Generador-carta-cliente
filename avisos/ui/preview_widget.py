@@ -35,12 +35,14 @@ class PreviewPanel(QWidget):
         self.label.setGraphicsEffect(sombra)
 
         self.scroll = QScrollArea()
+        self.scroll.setObjectName("previewScroll")
         self.scroll.setWidgetResizable(False)
         self.scroll.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
         self.scroll.setWidget(self.label)
         self.scroll.setStyleSheet(
-            "QScrollArea{background:#9a9a9a;border:none;}"
-            "QScrollArea > QWidget > QWidget{background:#9a9a9a;}")
+            "QScrollArea#previewScroll{background:#E8EDF4;border:1px solid #DCE5F0;"
+            "border-radius:7px;}"
+            "QScrollArea#previewScroll > QWidget > QWidget{background:#E8EDF4;}")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

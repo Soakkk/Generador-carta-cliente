@@ -25,10 +25,10 @@ periodo, año, fecha límite, nombre del cliente y la lista de documentos.
   botones directos (`1T`, `2T`, `3T`, `4T`, `Renta`). La rueda del ratón desplaza
   la pantalla, pero **no cambia accidentalmente** plantillas, años, fechas, fuentes
   ni valores numéricos.
-- Periodo y **año se sugieren solos** según la fecha del sistema, y la **fecha límite**
-  se calcula con la regla real de la AEAT: día 20 (o siguiente día hábil si cae en fin de
-  semana o festivo nacional/Viernes Santo), y la fecha de **domiciliación** (ese día menos
-  5 naturales), que es la que se usa por defecto en los avisos.
+- Periodo y **año se sugieren solos** según la fecha del sistema. La aplicación muestra
+  juntas las fechas orientativas de **domiciliación** y **presentación** de los modelos
+  trimestrales habituales. En el 4T separa las retenciones (111, 115 y similares) de los
+  modelos 130/131/303/309, que tienen vencimientos distintos.
 - Lista de documentos por filas: añadir, quitar, editar y reordenar sin trabajar
   sobre un bloque de texto. Las notas adicionales se mantienen plegadas cuando no
   hacen falta.
@@ -79,14 +79,11 @@ periodo, año, fecha límite, nombre del cliente y la lista de documentos.
 
 ## Cálculo de plazos (AEAT)
 
-En `avisos/templates.py` (`fecha_general_periodo`, `fecha_domiciliacion_periodo`) se calcula
-la fecha límite general de cada trimestre (día 20 para 1T/2T/3T; **día 30 para el 4T**, porque
-coincide con los resúmenes anuales), retrasándola al siguiente día hábil si cae en sábado,
-domingo, festivo nacional fijo o Viernes Santo (calculado por fórmula, no festivos
-autonómicos/locales). La fecha de domiciliación son **3 días hábiles antes** de esa fecha
-ajustada (no un "-5 naturales" fijo: coincide con -5 cuando de por medio hay fin de semana,
-pero da -3 si no lo hay, como pasa en enero). Verificado contra el calendario oficial de la
-AEAT para 2026 (4T 2025: general 30/01/2026, domiciliación 27/01/2026).
+En `avisos/templates.py` se calculan el primer vencimiento general y la fecha de
+domiciliación de cada trimestre. Para 1T/2T/3T son, con carácter general, los días 20 y 15.
+En el **4T** se distinguen dos grupos: retenciones hasta los días 20/15 de enero y modelos
+130/131/303/309 hasta los días 30/25. Si una fecha inhábil lo requiere, se ajusta usando
+fin de semana, festivos nacionales fijos y Viernes Santo.
 **Importante:** solo cubre festivos nacionales — conviene revisar el calendario oficial de la
 AEAT en fechas señaladas o con festivos locales de Murcia, que la propia AEAT sí tiene en
 cuenta para estos cálculos.

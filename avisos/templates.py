@@ -32,11 +32,11 @@ MESES = [
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ]
 
-# Periodos disponibles: clave -> etiqueta larga, meses[0-based] y plazo por defecto
-# El 4T no vence el dia 20 como los demas trimestres: al coincidir con los
-# resumenes anuales (mod. 390, 190, 180, 347...) su plazo general se
-# extiende hasta el dia 30 de enero (confirmado en el calendario oficial
-# de la AEAT).
+# Periodos disponibles: clave -> etiqueta larga, meses[0-based] y primer
+# vencimiento general. En el 4T hay dos grupos de fechas: retenciones hasta
+# el 20 de enero y modelos 130/131/303 hasta el 30. Para pedir documentacion
+# de forma prudente usamos siempre el primer vencimiento; la tabla detallada
+# muestra ambos.
 PERIODOS = {
     "1T": {"largo": "1.er Trimestre", "corto": "1T", "meses": [0, 1, 2],
            "plazo": (4, 20), "anio_offset": 0},
@@ -45,7 +45,7 @@ PERIODOS = {
     "3T": {"largo": "3.er Trimestre", "corto": "3T", "meses": [6, 7, 8],
            "plazo": (10, 20), "anio_offset": 0},
     "4T": {"largo": "4.º Trimestre", "corto": "4T", "meses": [9, 10, 11],
-           "plazo": (1, 30), "anio_offset": 1},
+           "plazo": (1, 20), "anio_offset": 1},
     "RENTA": {"largo": "Ejercicio (Renta)", "corto": "Renta", "meses": list(range(12)),
               "plazo": (6, 30), "anio_offset": 0},
 }
@@ -122,9 +122,12 @@ def _restar_dias_habiles(d: date, n: int) -> date:
 
 
 def fecha_general_periodo(clave: str, anio: int) -> date:
-    """Fecha limite general de presentacion (dia 20, excepto el 4T que es
-    dia 30 por coincidir con los resumenes anuales; o el habil siguiente
-    si cae en sabado, domingo o festivo)."""
+    """Primer vencimiento general del periodo, ajustado al dia habil.
+
+    Para el 4T devuelve el vencimiento de retenciones (20 de enero). Los
+    modelos 130/131/303 tienen un segundo vencimiento al final de enero,
+    disponible mediante ``fecha_general_cierre_tardio``.
+    """
     info = PERIODOS[clave]
     mes, dia = info["plazo"]
     base = date(anio + info["anio_offset"], mes, dia)
@@ -140,6 +143,16 @@ def fecha_domiciliacion_periodo(clave: str, anio: int) -> date:
     if clave == "RENTA":
         return fecha_general_periodo(clave, anio)
     return _restar_dias_habiles(fecha_general_periodo(clave, anio), 3)
+
+
+def fecha_general_cierre_tardio(anio: int) -> date:
+    """Vencimiento del 4T para los modelos 130, 131, 303 y 309."""
+    return _siguiente_dia_habil(date(anio + 1, 1, 30))
+
+
+def fecha_domiciliacion_cierre_tardio(anio: int) -> date:
+    """Fin de domiciliacion del segundo grupo de modelos del 4T."""
+    return _restar_dias_habiles(fecha_general_cierre_tardio(anio), 3)
 
 
 def plazo_por_defecto(clave: str, anio: int) -> date:
@@ -433,9 +446,31 @@ def _notas_html(notas: str) -> str:
 
 
 def _tabla_plazos_html(ctx: Contexto) -> str:
-    fecha_domiciliacion = html.escape(ctx.fecha_limite_txt, quote=False)
-    fecha_general = html.escape(fecha_larga(fecha_general_periodo(ctx.periodo, ctx.anio)), quote=False)
+    fecha_domiciliacion = html.escape(
+        fecha_larga(fecha_domiciliacion_periodo(ctx.periodo, ctx.anio)), quote=False)
+    fecha_general = html.escape(
+        fecha_larga(fecha_general_periodo(ctx.periodo, ctx.anio)), quote=False)
     borde = "#C9C2AC"
+    if ctx.periodo == "4T":
+        domiciliacion_tardia = html.escape(
+            fecha_larga(fecha_domiciliacion_cierre_tardio(ctx.anio)), quote=False)
+        general_tardia = html.escape(
+            fecha_larga(fecha_general_cierre_tardio(ctx.anio)), quote=False)
+        return f"""<table width="100%" cellpadding="5" cellspacing="0"
+       style="border-collapse:collapse; margin:6pt 0;">
+  <tr>
+    <td style="border:1px solid {borde}; background:#F3F0E6;"><b>Modelos habituales</b></td>
+    <td style="border:1px solid {borde}; background:#F3F0E6;"><b>Domiciliación / presentación</b></td>
+  </tr>
+  <tr>
+    <td style="border:1px solid {borde};">Retenciones (111, 115 y similares)</td>
+    <td style="border:1px solid {borde};">{fecha_domiciliacion} / {fecha_general}</td>
+  </tr>
+  <tr>
+    <td style="border:1px solid {borde};">Modelos 130, 131, 303 y 309</td>
+    <td style="border:1px solid {borde};">{domiciliacion_tardia} / {general_tardia}</td>
+  </tr>
+</table>"""
     return f"""<table width="100%" cellpadding="5" cellspacing="0"
        style="border-collapse:collapse; margin:6pt 0;">
   <tr>
