@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 
 import pytest
@@ -71,7 +72,8 @@ def test_release_asocia_el_hash_al_exe_seleccionado(monkeypatch):
             return json.dumps({
                 "tag_name": "v2.0.0",
                 "assets": [
-                    {"name": "AvisosEMarin_Setup_2.0.0.exe", "browser_download_url": "setup.exe"},
+                    {"name": "AvisosEMarin_Setup_2.0.0.exe", "browser_download_url": "setup.exe",
+                     "digest": f"sha256:{'a' * 64}"},
                     {"name": "AvisosEMarin_Setup_2.0.0.exe.sha256", "browser_download_url": "setup.sha"},
                     {"name": "AvisosEMarin_portable.zip.sha256", "browser_download_url": "zip.sha"},
                 ],
@@ -82,6 +84,55 @@ def test_release_asocia_el_hash_al_exe_seleccionado(monkeypatch):
     assert remota is not None
     assert remota.url_instalador == "setup.exe"
     assert remota.url_sha256 == "setup.sha"
+    assert remota.sha256 == "a" * 64
+
+
+def test_digest_de_github_evitar_checksum_auxiliar_desactualizado(tmp_path):
+    origen = tmp_path / "origen.exe"
+    contenido = b"instalador correcto"
+    origen.write_bytes(contenido)
+    sha = tmp_path / "origen.exe.sha256"
+    sha.write_text(f"{'0' * 64}  origen.exe\n", "ascii")
+    version = _version_local(origen, sha)
+    version.sha256 = hashlib.sha256(contenido).hexdigest()
+
+    destino = preparar_instalacion(version, destino=tmp_path / "descargas")
+
+    assert destino.read_bytes() == contenido
+
+
+def test_descarga_sha_incorrecta_reintenta_sin_cache(monkeypatch, tmp_path):
+    bueno = b"instalador correcto tras reintento"
+    malo = b"respuesta intermedia desactualizada"
+    respuestas = [malo, bueno]
+    peticiones = []
+
+    class Respuesta:
+        def __init__(self, contenido):
+            self._flujo = io.BytesIO(contenido)
+            self.headers = {"Content-Length": str(len(contenido))}
+
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def read(self, cantidad=-1): return self._flujo.read(cantidad)
+
+    def abrir(peticion, **_kwargs):
+        peticiones.append(peticion)
+        return Respuesta(respuestas.pop(0))
+
+    monkeypatch.setattr("avisos.updater.urllib.request.urlopen", abrir)
+    version = VersionRemota(
+        tag="v2.0.0", version=(2, 0, 0),
+        url_instalador="https://example.test/setup.exe", url_sha256="",
+        notas="", sha256=hashlib.sha256(bueno).hexdigest(),
+    )
+
+    destino = preparar_instalacion(version, destino=tmp_path / "descargas")
+
+    assert destino.read_bytes() == bueno
+    assert len(peticiones) == 2
+    assert "retry=" in peticiones[1].full_url
+    assert peticiones[1].get_header("Cache-control") == "no-cache"
 
 
 def test_reintento_fallido_conserva_instalador_verificado(monkeypatch, tmp_path):

@@ -9,6 +9,7 @@ import hashlib
 import os
 import re
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -33,6 +34,7 @@ class VersionRemota:
     url_instalador: str
     url_sha256: str
     notas: str
+    sha256: str = ""
 
 
 def _version_tupla(texto: str) -> tuple[int, int, int]:
@@ -57,12 +59,16 @@ def comprobar() -> VersionRemota | None:
     tag = datos.get("tag_name", "")
     instalador = ""
     nombre_instalador = ""
+    digest_instalador = ""
     assets = datos.get("assets", [])
     for asset in assets:
         nombre = asset.get("name", "")
         if nombre.lower().endswith(".exe") and "setup" in nombre.lower():
             instalador = asset.get("browser_download_url", "")
             nombre_instalador = nombre
+            digest = str(asset.get("digest", ""))
+            coincidencia = re.fullmatch(r"sha256:([0-9a-fA-F]{64})", digest)
+            digest_instalador = coincidencia.group(1).lower() if coincidencia else ""
     sha256 = ""
     esperado = f"{nombre_instalador}.sha256".casefold()
     for asset in assets:
@@ -74,7 +80,7 @@ def comprobar() -> VersionRemota | None:
     return VersionRemota(
         tag=tag, version=_version_tupla(tag),
         url_instalador=instalador, url_sha256=sha256,
-        notas=datos.get("body", ""))
+        notas=datos.get("body", ""), sha256=digest_instalador)
 
 
 def hay_actualizacion(version_actual: str, remota: VersionRemota) -> bool:
@@ -93,13 +99,15 @@ def preparar_instalacion(
     progreso: Callable[[int], None] | None = None,
 ) -> Path:
     """Descarga atómicamente el instalador y exige un SHA-256 válido."""
-    if not act.url_sha256:
-        raise ValueError("La actualización no incluye un SHA-256 verificable")
-    texto_hash = _leer_url(act.url_sha256).decode("utf-8", "replace")
-    encontrado = re.search(r"\b([0-9a-fA-F]{64})\b", texto_hash)
-    if not encontrado:
-        raise ValueError("El archivo SHA-256 de la actualización no es válido")
-    esperado = encontrado.group(1).lower()
+    esperado = act.sha256.lower() if re.fullmatch(r"[0-9a-fA-F]{64}", act.sha256) else ""
+    if not esperado:
+        if not act.url_sha256:
+            raise ValueError("La actualización no incluye un SHA-256 verificable")
+        texto_hash = _leer_url(act.url_sha256).decode("utf-8", "replace")
+        encontrado = re.search(r"\b([0-9a-fA-F]{64})\b", texto_hash)
+        if not encontrado:
+            raise ValueError("El archivo SHA-256 de la actualización no es válido")
+        esperado = encontrado.group(1).lower()
 
     base = Path(destino) if destino is not None else Path(tempfile.gettempdir()) / "AvisosEMarin" / "updates"
     etiqueta = re.sub(r"[^0-9A-Za-z._-]+", "_", act.tag).strip("._") or "actualizacion"
@@ -114,28 +122,46 @@ def preparar_instalacion(
     )
     os.close(descriptor)
     temporal = Path(nombre_temporal)
-    digestor = hashlib.sha256()
-    peticion = urllib.request.Request(act.url_instalador, headers={"User-Agent": "AvisosEMarin"})
     try:
-        with urllib.request.urlopen(peticion, timeout=20) as respuesta:
-            total = int(respuesta.headers.get("Content-Length", 0)) or 0
-            leido = 0
-            with temporal.open("wb") as archivo:
-                while True:
-                    bloque = respuesta.read(65536)
-                    if not bloque:
-                        break
-                    archivo.write(bloque)
-                    digestor.update(bloque)
-                    leido += len(bloque)
-                    if progreso and total:
-                        progreso(min(99, int(leido * 100 / total)))
-        if digestor.hexdigest() != esperado:
-            raise ValueError("La verificación SHA-256 no coincide")
-        os.replace(temporal, ruta)
-        if progreso:
-            progreso(100)
-        return ruta
+        recibido = ""
+        for intento in range(2):
+            digestor = hashlib.sha256()
+            url_descarga = act.url_instalador
+            if intento and url_descarga.lower().startswith(("http://", "https://")):
+                separador = "&" if "?" in url_descarga else "?"
+                url_descarga += f"{separador}retry={time.time_ns()}"
+            peticion = urllib.request.Request(
+                url_descarga,
+                headers={
+                    "User-Agent": "AvisosEMarin",
+                    "Cache-Control": "no-cache",
+                    "Pragma": "no-cache",
+                },
+            )
+            with urllib.request.urlopen(peticion, timeout=20) as respuesta:
+                total = int(respuesta.headers.get("Content-Length", 0)) or 0
+                leido = 0
+                with temporal.open("wb") as archivo:
+                    while True:
+                        bloque = respuesta.read(65536)
+                        if not bloque:
+                            break
+                        archivo.write(bloque)
+                        digestor.update(bloque)
+                        leido += len(bloque)
+                        if progreso and total:
+                            progreso(min(99, int(leido * 100 / total)))
+            recibido = digestor.hexdigest()
+            if recibido == esperado:
+                os.replace(temporal, ruta)
+                if progreso:
+                    progreso(100)
+                return ruta
+            temporal.unlink(missing_ok=True)
+            if progreso:
+                progreso(0)
+        raise ValueError(
+            "La verificación de integridad SHA-256 no coincide después de reintentar")
     except Exception:
         temporal.unlink(missing_ok=True)
         raise
