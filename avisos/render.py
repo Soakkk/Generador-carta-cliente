@@ -35,12 +35,6 @@ DELTA_TITULO = 4.5
 DELTA_PIE_NEGRITA = -2.0
 DELTA_PIE_NORMAL = -2.5
 
-# QTextDocument, sin dispositivo asociado, interpreta sus medidas como si
-# el destino tuviera 96 DPI. Hay que compensarlo para que el texto no
-# salga minusculo en un QPrinter a alta resolucion.
-_QTEXTDOCUMENT_DPI = 96.0
-
-
 def _mm(px_per_mm: float, mm: float) -> float:
     return mm * px_per_mm
 
@@ -103,8 +97,14 @@ def documento_inicial(ctx: Contexto, plantilla: Plantilla,
     return componer_documento(render_titulo(ctx, plantilla), render_cuerpo(ctx, plantilla), est)
 
 
-def _doc_desde_html(html: str, ancho_px: float, est: E.Estilo) -> QTextDocument:
+def _doc_desde_html(html: str, ancho_px: float, est: E.Estilo,
+                    dispositivo=None) -> QTextDocument:
     doc = QTextDocument()
+    # Asociar el dispositivo antes de medir evita componer el texto a 96 DPI
+    # y ampliarlo después. Así Qt calcula glifos, kerning y saltos de línea a
+    # la resolución real de la imagen o del PDF, sin espacios irregulares.
+    if dispositivo is not None:
+        doc.documentLayout().setPaintDevice(dispositivo)
     doc.setDocumentMargin(0)
     f = QFont(est.fuente)
     f.setPointSizeF(est.tamano_cuerpo)
@@ -146,18 +146,14 @@ def pintar_documento(painter: QPainter, ancho_px: float, alto_px: float,
     # --- Pie de pagina: se calcula antes para saber el hueco disponible ---
     pie_y = alto_px - _mm(ppm, MARGEN_INF) - _mm(ppm, 13)
 
-    # --- Contenido (titulo + cuerpo), con compensacion de DPI ---
-    escala_doc = res_dpi / _QTEXTDOCUMENT_DPI
-    content_w_doc = content_w / escala_doc
-    alto_disponible_doc = max((pie_y - y) / escala_doc, 1)
-
-    doc = _doc_desde_html(contenido_html, content_w_doc, est)
+    # --- Contenido: maquetado directamente a la resolucion del destino ---
+    alto_disponible = max(pie_y - y, 1)
+    doc = _doc_desde_html(contenido_html, content_w, est, painter.device())
     if info is not None:
-        info["desborda"] = (doc.size().height() * escala_doc) > (pie_y - y)
+        info["desborda"] = doc.size().height() > alto_disponible
     painter.save()
     painter.translate(x0, y)
-    painter.scale(escala_doc, escala_doc)
-    doc.drawContents(painter, QRectF(0, 0, content_w_doc, alto_disponible_doc))
+    doc.drawContents(painter, QRectF(0, 0, content_w, alto_disponible))
     painter.restore()
 
     # --- Pie de pagina ---
@@ -190,6 +186,9 @@ def render_preview_documento(contenido_html: str, dpi: float = 110.0,
     w = int(round(A4_W_MM * ppm))
     h = int(round(A4_H_MM * ppm))
     img = QImage(w, h, QImage.Format_RGB32)
+    dpm = int(round(dpi / 0.0254))
+    img.setDotsPerMeterX(dpm)
+    img.setDotsPerMeterY(dpm)
     img.fill(QColor("#FFFFFF"))
     p = QPainter(img)
     p.setRenderHint(QPainter.Antialiasing, True)

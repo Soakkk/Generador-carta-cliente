@@ -58,6 +58,10 @@ QWidget#panelFormulario {{ background: transparent; border: none; }}
 QWidget#panelDocumento {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 10px; }}
 QLabel#tituloSeccion {{ color: {INK}; font-size: 17px; font-weight: 600; }}
 QLabel#textoSuave {{ color: {MUTED}; font-size: 11px; }}
+QLabel#infoFecha {{
+    color: {MUTED}; font-size: 11px; background: {ACCENT_FAINT};
+    border: 1px solid {BORDER}; border-radius: 6px; padding: 7px 9px;
+}}
 
 QGroupBox {{
     background: {CARD}; border: 1px solid {BORDER}; border-radius: 9px;
@@ -142,12 +146,16 @@ QProgressBar {{
 }}
 QProgressBar::chunk {{ background: {ACCENT}; border-radius: 3px; }}
 
-QScrollBar:vertical {{ background: transparent; width: 11px; margin: 2px; }}
-QScrollBar::handle:vertical {{ background: #9BAABD; border-radius: 4px; min-height: 36px; }}
-QScrollBar::handle:vertical:hover {{ background: {MUTED}; }}
-QScrollBar:horizontal {{ background: transparent; height: 11px; margin: 2px; }}
-QScrollBar::handle:horizontal {{ background: #9BAABD; border-radius: 4px; min-width: 36px; }}
-QScrollBar::handle:horizontal:hover {{ background: {MUTED}; }}
+QScrollBar:vertical {{ background: #EEF3F8; width: 14px; margin: 2px; border-radius: 6px; }}
+QScrollBar::handle:vertical {{
+    background: #AFC0D1; border: 2px solid #EEF3F8; border-radius: 5px; min-height: 48px;
+}}
+QScrollBar::handle:vertical:hover {{ background: #7F93A8; }}
+QScrollBar:horizontal {{ background: #EEF3F8; height: 14px; margin: 2px; border-radius: 6px; }}
+QScrollBar::handle:horizontal {{
+    background: #AFC0D1; border: 2px solid #EEF3F8; border-radius: 5px; min-width: 48px;
+}}
+QScrollBar::handle:horizontal:hover {{ background: #7F93A8; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
 QToolTip {{ background: {CARD}; color: {INK}; border: 1px solid {BORDER}; padding: 7px 9px; }}

@@ -48,6 +48,11 @@ def _ajustar_desplegable(combo: QComboBox) -> None:
         combo.setItemData(i, combo.itemText(i), Qt.ToolTipRole)
 
 
+def _icono(nombre: str) -> QIcon:
+    """Carga un icono SVG propio, igual en todas las versiones de Windows."""
+    return QIcon(str(config.asset("icons", f"{nombre}.svg")))
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -68,6 +73,7 @@ class MainWindow(QMainWindow):
         self._estado_actualizacion = U.ESTADO_INACTIVA
         self._ruta_update_lista: str | None = None
         self._instalar_al_cerrar = False
+        self._scroll_inicial_ajustado = False
         self._restaurando_borrador = False
         self._undo_cliente: dict | None = None
         self._undo_documento: tuple[int, str] | None = None
@@ -195,6 +201,7 @@ class MainWindow(QMainWindow):
 
         self.btn_copiar = QPushButton("Copiar texto")
         self.btn_copiar.setObjectName("primario")
+        self.btn_copiar.setIcon(_icono("copy-white"))
         self.btn_copiar.setMinimumHeight(40)
         self.btn_copiar.setShortcut("Ctrl+Return")
         self.btn_copiar.setToolTip("Copiar el texto para WhatsApp o correo (Ctrl+Entrar)")
@@ -202,21 +209,25 @@ class MainWindow(QMainWindow):
         fila.addWidget(self.btn_copiar)
 
         self.btn_pdf = QPushButton("Guardar PDF…")
+        self.btn_pdf.setIcon(_icono("pdf"))
         self.btn_pdf.setMinimumHeight(40)
         self.btn_pdf.clicked.connect(lambda: self._guardar_pdf(abrir=False))
         fila.addWidget(self.btn_pdf)
 
         self.btn_siguiente = QPushButton("Guardar y siguiente cliente")
+        self.btn_siguiente.setIcon(_icono("next"))
         self.btn_siguiente.setMinimumHeight(40)
         self.btn_siguiente.clicked.connect(lambda: self._guardar_y_siguiente(abrir=False))
         fila.addWidget(self.btn_siguiente)
 
         self.btn_guardar_abrir = QPushButton("Guardar y abrir")
+        self.btn_guardar_abrir.setIcon(_icono("pdf"))
         self.btn_guardar_abrir.clicked.connect(lambda: self._guardar_pdf(abrir=True))
         fila.addWidget(self.btn_guardar_abrir)
 
         self.btn_carpeta = QToolButton()
         self.btn_carpeta.setText("Carpeta de PDF…")
+        self.btn_carpeta.setIcon(_icono("folder"))
         self.btn_carpeta.setToolTip("Cambiar dónde se guardan los PDF")
         self.btn_carpeta.clicked.connect(self._elegir_carpeta_destino)
         fila.addWidget(self.btn_carpeta)
@@ -232,11 +243,12 @@ class MainWindow(QMainWindow):
         panel.setObjectName("panelFormulario")
         self.panel_formulario = panel
         panel.setMinimumWidth(300)
-        form_scroll = QScrollArea()
-        form_scroll.setWidgetResizable(True)
-        form_scroll.setMinimumWidth(380)
-        form_scroll.setWidget(panel)
-        form_scroll.setFrameShape(QFrame.NoFrame)
+        self.form_scroll = QScrollArea()
+        self.form_scroll.setObjectName("formScroll")
+        self.form_scroll.setWidgetResizable(True)
+        self.form_scroll.setMinimumWidth(380)
+        self.form_scroll.setWidget(panel)
+        self.form_scroll.setFrameShape(QFrame.NoFrame)
         col = QVBoxLayout(panel)
         col.setContentsMargins(14, 14, 14, 14)
         col.setSpacing(12)
@@ -310,12 +322,14 @@ class MainWindow(QMainWindow):
         fila_cliente.setSpacing(5)
         fila_cliente.addWidget(self.txt_cliente, 1)
         btn_nuevo_cliente = QToolButton()
-        btn_nuevo_cliente.setText("+")
+        btn_nuevo_cliente.setIcon(_icono("add"))
+        btn_nuevo_cliente.setAccessibleName("Añadir un cliente nuevo")
         btn_nuevo_cliente.setToolTip("Añadir un cliente nuevo")
         btn_nuevo_cliente.clicked.connect(self._nuevo_cliente_rapido)
         fila_cliente.addWidget(btn_nuevo_cliente)
         self.btn_editar_cliente = QToolButton()
         self.btn_editar_cliente.setText("Editar")
+        self.btn_editar_cliente.setIcon(_icono("edit"))
         self.btn_editar_cliente.setToolTip("Editar la ficha del cliente seleccionado")
         self.btn_editar_cliente.clicked.connect(self._editar_cliente_rapido)
         fila_cliente.addWidget(self.btn_editar_cliente)
@@ -341,7 +355,7 @@ class MainWindow(QMainWindow):
         ly_d.addRow(fecha_widget)
 
         self.lbl_aviso_fecha = QLabel("")
-        self.lbl_aviso_fecha.setStyleSheet("color:#B3541E; font-size:11px;")
+        self.lbl_aviso_fecha.setObjectName("infoFecha")
         self.lbl_aviso_fecha.setWordWrap(True)
         ly_d.addRow("", self.lbl_aviso_fecha)
 
@@ -368,19 +382,24 @@ class MainWindow(QMainWindow):
         self.lista_docs.itemChanged.connect(self._on_docs_editados)
         ly_doc.addWidget(self.lista_docs)
         fila_docs = QHBoxLayout()
-        btn_anadir_doc = QPushButton("+ Añadir")
+        btn_anadir_doc = QPushButton("Añadir")
+        btn_anadir_doc.setIcon(_icono("add"))
         btn_anadir_doc.clicked.connect(self._anadir_documento)
         btn_quitar_doc = QPushButton("Quitar")
+        btn_quitar_doc.setIcon(_icono("remove"))
         btn_quitar_doc.clicked.connect(self._quitar_documento)
         btn_subir_doc = QToolButton()
-        btn_subir_doc.setText("↑")
+        btn_subir_doc.setIcon(_icono("arrow-up"))
+        btn_subir_doc.setAccessibleName("Subir documento")
         btn_subir_doc.setToolTip("Subir documento")
         btn_subir_doc.clicked.connect(lambda: self._mover_documento(-1))
         btn_bajar_doc = QToolButton()
-        btn_bajar_doc.setText("↓")
+        btn_bajar_doc.setIcon(_icono("arrow-down"))
+        btn_bajar_doc.setAccessibleName("Bajar documento")
         btn_bajar_doc.setToolTip("Bajar documento")
         btn_bajar_doc.clicked.connect(lambda: self._mover_documento(1))
         btn_reset = QPushButton("Restablecer")
+        btn_reset.setIcon(_icono("refresh"))
         btn_reset.clicked.connect(self._reset_docs)
         fila_docs.addWidget(btn_anadir_doc)
         fila_docs.addWidget(btn_quitar_doc)
@@ -417,7 +436,7 @@ class MainWindow(QMainWindow):
         col.addWidget(self.gb_notas)
         col.addStretch(1)
 
-        return form_scroll
+        return self.form_scroll
 
     def _construir_editor(self) -> QWidget:
         contenedor = QWidget()
@@ -446,11 +465,11 @@ class MainWindow(QMainWindow):
         cab.addWidget(self.btn_modo_preview)
         cab.addWidget(self.btn_modo_editor)
         lay.addLayout(cab)
-        ayuda = QLabel(
+        self.lbl_ayuda_documento = QLabel(
             "Este es el texto plano que puedes copiar y pegar en WhatsApp o correo. "
             "También puedes guardarlo como PDF.")
-        ayuda.setObjectName("textoSuave")
-        lay.addWidget(ayuda)
+        self.lbl_ayuda_documento.setObjectName("textoSuave")
+        lay.addWidget(self.lbl_ayuda_documento)
 
         self.paginas_documento = QStackedWidget()
 
@@ -515,10 +534,13 @@ class MainWindow(QMainWindow):
         barra = QHBoxLayout()
         barra.setSpacing(4)
 
-        def boton(texto, tooltip, slot, checkable=False):
+        def boton(texto, tooltip, slot, checkable=False, icono=None):
             b = QToolButton()
             b.setText(texto)
             b.setToolTip(tooltip)
+            b.setAccessibleName(tooltip)
+            if icono:
+                b.setIcon(_icono(icono))
             b.setCheckable(checkable)
             b.clicked.connect(slot)
             barra.addWidget(b)
@@ -532,10 +554,12 @@ class MainWindow(QMainWindow):
         fi.setItalic(True)
         self.btn_cursiva = boton("C", "Cursiva (Ctrl+I)", self._fmt_cursiva, checkable=True)
         self.btn_cursiva.setFont(fi)
-        boton("• Lista", "Lista con viñetas", self._fmt_lista)
+        boton("", "Lista con viñetas", self._fmt_lista, icono="list")
         barra.addSpacing(10)
-        boton("⯇", "Alinear a la izquierda", lambda: self.editor.setAlignment(Qt.AlignLeft))
-        boton("≡", "Centrar", lambda: self.editor.setAlignment(Qt.AlignHCenter))
+        boton("", "Alinear a la izquierda", lambda: self.editor.setAlignment(Qt.AlignLeft),
+              icono="align-left")
+        boton("", "Centrar", lambda: self.editor.setAlignment(Qt.AlignHCenter),
+              icono="align-center")
         barra.addStretch(1)
 
         self.btn_guardar_def = QPushButton("Guardar como predeterminado")
@@ -575,6 +599,9 @@ class MainWindow(QMainWindow):
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
+        if not self._scroll_inicial_ajustado:
+            self._scroll_inicial_ajustado = True
+            QTimer.singleShot(0, lambda: self.form_scroll.verticalScrollBar().setValue(0))
         if not self._comprobacion_inicial_hecha:
             self._comprobacion_inicial_hecha = True
             QTimer.singleShot(3000, self._comprobar_actualizacion_periodica)
@@ -668,7 +695,28 @@ class MainWindow(QMainWindow):
         qd = self.date_limite.date()
         d = date(qd.year(), qd.month(), qd.day())
         aviso = T.aviso_fecha(d)
-        self.lbl_aviso_fecha.setText(f"⚠ {aviso}" if aviso else "")
+        clave = self._periodo_actual()
+        anio = self.spin_anio.value()
+        if clave == "RENTA":
+            texto = "Fecha de entrega solicitada; puede ajustarse a cada campaña de Renta."
+        else:
+            domic = T.fecha_domiciliacion_periodo(clave, anio).strftime("%d/%m/%Y")
+            general = T.fecha_general_periodo(clave, anio).strftime("%d/%m/%Y")
+            if clave == "4T":
+                domic_2 = T.fecha_domiciliacion_cierre_tardio(anio).strftime("%d/%m/%Y")
+                general_2 = T.fecha_general_cierre_tardio(anio).strftime("%d/%m/%Y")
+                texto = (f"Retenciones: domic. {domic} · presentar {general}. "
+                         f"130/131/303/309: domic. {domic_2} · presentar {general_2}.")
+            else:
+                texto = f"Plazo fiscal orientativo: domiciliar {domic} · presentar {general}."
+            if d != T.plazo_por_defecto(clave, anio):
+                texto = "Fecha de entrega personalizada. " + texto
+        if aviso:
+            texto += f" ⚠ {aviso}"
+        self.lbl_aviso_fecha.setText(texto)
+        self.lbl_aviso_fecha.setToolTip(
+            "Fechas orientativas para los modelos trimestrales habituales. "
+            "Conviene comprobar particularidades en el calendario oficial de la AEAT.")
 
     def _on_docs_editados(self, item: QListWidgetItem | None = None) -> None:
         if item is not None:
@@ -1044,6 +1092,7 @@ class MainWindow(QMainWindow):
             else:
                 self._regenerar_editor()
             self._actualizar_ficha_cliente()
+            self._actualizar_aviso_fecha()
         finally:
             self._restaurando_borrador = False
 
@@ -1088,6 +1137,10 @@ class MainWindow(QMainWindow):
             "Vista previa PDF" if indice == 0 else "Texto listo para enviar")
         self.btn_modo_preview.setChecked(indice == 0)
         self.btn_modo_editor.setChecked(indice == 1)
+        self.lbl_ayuda_documento.setText(
+            "Así quedará el PDF final, con cabecera, tipografía y pie de página."
+            if indice == 0 else
+            "Edita el texto y cópialo en WhatsApp o correo; el PDF conservará el formato.")
         if indice == 0:
             self._actualizar_preview()
 

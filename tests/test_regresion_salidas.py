@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QSize
+from PySide6.QtGui import QImage
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtWidgets import QApplication
 
@@ -90,6 +91,19 @@ def _assert_raster(nombre: str, ruta: Path) -> None:
     assert sum(1 for valor in pixeles[::4] if valor < 245) > 4_000
     if platform.system() == "Darwin":
         assert hashlib.sha256(pixeles).hexdigest() == RASTER_SHA256_DARWIN[nombre]
+
+
+def test_texto_se_compone_a_la_resolucion_real_sin_escalado_posterior():
+    imagen = QImage(1200, 800, QImage.Format_RGB32)
+    dpm = int(round(300 / 0.0254))
+    imagen.setDotsPerMeterX(dpm)
+    imagen.setDotsPerMeterY(dpm)
+
+    documento = render._doc_desde_html(
+        "<p>Texto con kerning uniforme: AVA To.</p>", 900, Estilo(), imagen)
+
+    assert documento.documentLayout().paintDevice() == imagen
+    assert imagen.logicalDpiX() == 300
 
 
 @pytest.mark.parametrize("plantilla", templates.PLANTILLAS, ids=lambda p: p.id)

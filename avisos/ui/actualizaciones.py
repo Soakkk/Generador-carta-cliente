@@ -162,7 +162,16 @@ def _procesar_resultado(parent, version_actual: str, silencioso: bool, remota) -
             progreso.close()
         if hasattr(parent, "_actualizacion_error"):
             parent._actualizacion_error(mensaje)
-        QMessageBox.critical(parent, "Error", f"No se pudo descargar la actualización:\n{mensaje}")
+        if "SHA-256" in mensaje:
+            detalle = (
+                "La descarga no superó la comprobación de seguridad, incluso después "
+                "de reintentarlo. No se ha instalado ningún archivo.\n\n"
+                "Vuelve a intentarlo más tarde o descarga el instalador desde la página "
+                "oficial de versiones en GitHub."
+            )
+        else:
+            detalle = f"No se pudo descargar la actualización:\n{mensaje}"
+        QMessageBox.critical(parent, "Error de actualización", detalle)
         hilo.deleteLater()
 
     hilo.terminado.connect(_al_terminar)
