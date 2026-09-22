@@ -1092,6 +1092,7 @@ class MainWindow(QMainWindow):
             else:
                 self._regenerar_editor()
             self._actualizar_ficha_cliente()
+            self._actualizar_aviso_fecha()
         finally:
             self._restaurando_borrador = False
 

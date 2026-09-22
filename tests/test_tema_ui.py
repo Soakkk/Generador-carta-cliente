@@ -119,6 +119,16 @@ def test_ayuda_cambia_entre_texto_y_vista_previa(win):
     assert "WhatsApp" in win.lbl_ayuda_documento.text()
 
 
+def test_restaurar_borrador_actualiza_la_ayuda_de_fecha(win):
+    datos = win._serializar_borrador()
+    datos["periodo"] = "RENTA"
+    datos["fecha_limite"] = "2026-06-30"
+
+    win._restaurar_borrador(datos)
+
+    assert "campaña de Renta" in win.lbl_aviso_fecha.text()
+
+
 def test_icono_comparte_rombo_azul_carta_blanca_y_acento_dorado(qapp):
     """Recuperar el sobre azul marino rompería la identificación de la suite."""
     imagen = QImage(str(config.asset("app-icon.png"))).convertToFormat(
