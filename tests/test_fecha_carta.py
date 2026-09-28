@@ -4,12 +4,22 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from PySide6.QtCore import QDate
+from PySide6.QtCore import QCoreApplication, QDate, QEvent, QTimer
 from PySide6.QtWidgets import QApplication
 
 from avisos import render, templates
 
 _OSCURO = bytes(1 if v < 200 else 0 for v in range(256))
+
+
+def _destruir(ventana) -> None:
+    """Sin bucle de eventos, deleteLater() no destruye la ventana: su
+    autoguardado del borrador seguiría programado y, al vencer durante la
+    prueba siguiente, escribiría en el borrador de esa prueba."""
+    for temporizador in ventana.findChildren(QTimer):
+        temporizador.stop()
+    ventana.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 @pytest.fixture(scope="module")
@@ -103,12 +113,13 @@ def test_el_formulario_permite_cambiar_y_quitar_la_fecha(qapp):
 
         # Quitarla es una preferencia: se recuerda al volver a abrir.
         otra = MainWindow()
-        assert otra.chk_fecha_carta.isChecked() is False
-        assert otra.date_carta.isEnabled() is False
-        otra.deleteLater()
+        try:
+            assert otra.chk_fecha_carta.isChecked() is False
+            assert otra.date_carta.isEnabled() is False
+        finally:
+            _destruir(otra)
     finally:
-        win.deleteLater()
-        qapp.processEvents()
+        _destruir(win)
 
 
 def test_el_lote_fija_la_misma_fecha_para_toda_la_serie(qapp, tmp_path, monkeypatch):
@@ -120,11 +131,10 @@ def test_el_lote_fija_la_misma_fecha_para_toda_la_serie(qapp, tmp_path, monkeypa
     dialogo._iniciar_lote(["Uno SL", "Dos SL"])
     assert dialogo._lote.configuracion["con_fecha"] is True
     assert dialogo._lote.configuracion["fecha_carta"] == "2026-04-01"
-    dialogo.deleteLater()
+    _destruir(dialogo)
 
     # Al reanudar la serie otro día se mantiene la fecha con la que empezó.
     monkeypatch.setattr(render, "fecha_carta", lambda: date(2026, 4, 2))
     reanudado = LoteDialog(None, templates.Contexto(), templates.PLANTILLAS[0], str(destino))
     assert reanudado._ctx_base.fecha_carta == date(2026, 4, 1)
-    reanudado.deleteLater()
-    qapp.processEvents()
+    _destruir(reanudado)
