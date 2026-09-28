@@ -8,6 +8,7 @@ que se ve es lo que sale en el PDF.
 from __future__ import annotations
 
 import re
+from datetime import date
 from html import escape
 from pathlib import Path
 
@@ -20,7 +21,7 @@ from PySide6.QtPrintSupport import QPrinter
 
 from . import config
 from . import estilo as E
-from .templates import Contexto, Plantilla, render_cuerpo, render_titulo
+from .templates import Contexto, Plantilla, fecha_larga, render_cuerpo, render_titulo
 
 # A4 en mm
 A4_W_MM, A4_H_MM = 210.0, 297.0
@@ -29,14 +30,27 @@ MARGEN_X = 18.0
 MARGEN_SUP = 13.0
 MARGEN_INF = 16.0
 
-# Tamanos del titulo y el pie como diferencia respecto al tamano de cuerpo
-# (configurable), para que todo escale de forma proporcional.
+# Tamanos del titulo, la fecha y el pie como diferencia respecto al tamano de
+# cuerpo (configurable), para que todo escale de forma proporcional.
 DELTA_TITULO = 3.5
+DELTA_FECHA = -1.0
 DELTA_PIE_NEGRITA = -2.0
 DELTA_PIE_NORMAL = -2.5
 
 def _mm(px_per_mm: float, mm: float) -> float:
     return mm * px_per_mm
+
+
+def fecha_carta() -> date:
+    """Fecha de la carta cuando no se elige otra: la del dia en que se genera."""
+    return date.today()
+
+
+def fecha_de(ctx: Contexto) -> date | None:
+    """Fecha que lleva la carta de `ctx`, o None si va sin lugar ni fecha."""
+    if not ctx.con_fecha:
+        return None
+    return ctx.fecha_carta or fecha_carta()
 
 
 def stylesheet(est: E.Estilo) -> str:
@@ -97,6 +111,22 @@ def documento_inicial(ctx: Contexto, plantilla: Plantilla,
     return componer_documento(render_titulo(ctx, plantilla), render_cuerpo(ctx, plantilla), est)
 
 
+def html_como_editor(html: str, est: E.Estilo) -> str:
+    """`html` con el espacio entre parrafos que le pone el editor.
+
+    Sin esto, lo que se genera sin pasar por el editor (el lote y las vistas
+    previas de los dialogos) salia con los parrafos pegados, mas apretado que
+    la vista previa principal y que el PDF de un solo cliente."""
+    doc = QTextDocument()
+    f = QFont(est.fuente)
+    f.setPointSizeF(est.tamano_cuerpo)
+    doc.setDefaultFont(f)
+    doc.setDefaultStyleSheet(stylesheet(est))
+    doc.setHtml(html)
+    aplicar_margenes_bloques(doc, est)
+    return doc.toHtml()
+
+
 def _doc_desde_html(html: str, ancho_px: float, est: E.Estilo,
                     dispositivo=None) -> QTextDocument:
     doc = QTextDocument()
@@ -117,9 +147,11 @@ def _doc_desde_html(html: str, ancho_px: float, est: E.Estilo,
 
 def pintar_documento(painter: QPainter, ancho_px: float, alto_px: float,
                      res_dpi: float, contenido_html: str,
-                     info: dict | None = None, est: E.Estilo | None = None) -> None:
-    """Dibuja logo + linea dorada + `contenido_html` (titulo y cuerpo ya
-    juntos) + pie de pagina fijo. `contenido_html` puede venir del editor."""
+                     info: dict | None = None, est: E.Estilo | None = None,
+                     fecha: date | None = None) -> None:
+    """Dibuja logo + linea dorada + lugar y fecha (si hay `fecha`) +
+    `contenido_html` (titulo y cuerpo ya juntos) + pie de pagina fijo.
+    `contenido_html` puede venir del editor."""
     est = est or E.cargar()
     ppm = res_dpi / 25.4
     fuente = est.fuente
@@ -141,7 +173,19 @@ def pintar_documento(painter: QPainter, ancho_px: float, alto_px: float,
 
     # --- Linea dorada ---
     painter.fillRect(QRectF(x0, y, content_w, _mm(ppm, 0.5)), QColor(config.GOLD))
-    y += _mm(ppm, 5)
+
+    # --- Lugar y fecha (a la derecha, bajo la linea) ---
+    if fecha is not None:
+        y += _mm(ppm, 3.5)
+        f_fecha = QFont(fuente)
+        f_fecha.setPointSizeF(est.tamano_cuerpo + DELTA_FECHA)
+        painter.setFont(f_fecha)
+        painter.setPen(QColor(config.INK))
+        painter.drawText(QRectF(x0, y, content_w, _mm(ppm, 5)), int(Qt.AlignRight | Qt.AlignTop),
+                         f"{config.COMPANY_LOCALIDAD}, {fecha_larga(fecha)}")
+        y += _mm(ppm, 8)
+    else:
+        y += _mm(ppm, 5)
 
     # --- Pie de pagina: se calcula antes para saber el hueco disponible ---
     pie_y = alto_px - _mm(ppm, MARGEN_INF) - _mm(ppm, 13)
@@ -181,7 +225,8 @@ def pintar_documento(painter: QPainter, ancho_px: float, alto_px: float,
 
 # --- Render a imagen (vista previa) --------------------------------------
 def render_preview_documento(contenido_html: str, dpi: float = 110.0,
-                             info: dict | None = None, est: E.Estilo | None = None) -> QImage:
+                             info: dict | None = None, est: E.Estilo | None = None,
+                             fecha: date | None = None) -> QImage:
     ppm = dpi / 25.4
     w = int(round(A4_W_MM * ppm))
     h = int(round(A4_H_MM * ppm))
@@ -195,24 +240,26 @@ def render_preview_documento(contenido_html: str, dpi: float = 110.0,
     p.setRenderHint(QPainter.TextAntialiasing, True)
     p.setRenderHint(QPainter.SmoothPixmapTransform, True)
     try:
-        pintar_documento(p, w, h, dpi, contenido_html, info=info, est=est)
+        pintar_documento(p, w, h, dpi, contenido_html, info=info, est=est, fecha=fecha)
     finally:
         p.end()
     return img
 
 
 def render_preview_textos(titulo: str, cuerpo_html: str, dpi: float = 110.0,
-                          info: dict | None = None, est: E.Estilo | None = None) -> QImage:
+                          info: dict | None = None, est: E.Estilo | None = None,
+                          fecha: date | None = None) -> QImage:
     est = est or E.cargar()
-    contenido = componer_documento(titulo, cuerpo_html, est)
-    return render_preview_documento(contenido, dpi=dpi, info=info, est=est)
+    contenido = html_como_editor(componer_documento(titulo, cuerpo_html, est), est)
+    return render_preview_documento(contenido, dpi=dpi, info=info, est=est, fecha=fecha)
 
 
 def render_preview(ctx: Contexto, plantilla: Plantilla, dpi: float = 110.0,
                    info: dict | None = None, est: E.Estilo | None = None) -> QImage:
     titulo = render_titulo(ctx, plantilla)
     cuerpo_html = render_cuerpo(ctx, plantilla)
-    return render_preview_textos(titulo, cuerpo_html, dpi=dpi, info=info, est=est)
+    return render_preview_textos(titulo, cuerpo_html, dpi=dpi, info=info, est=est,
+                                 fecha=fecha_de(ctx))
 
 
 # --- Render a PDF --------------------------------------------------------
@@ -227,7 +274,8 @@ def _nuevo_printer(ruta: str | Path) -> QPrinter:
 
 
 def render_pdf_documento(contenido_html: str, ruta: str | Path,
-                         info: dict | None = None, est: E.Estilo | None = None) -> None:
+                         info: dict | None = None, est: E.Estilo | None = None,
+                         fecha: date | None = None) -> None:
     printer = _nuevo_printer(ruta)
     painter = QPainter()
     if not painter.begin(printer):
@@ -236,7 +284,7 @@ def render_pdf_documento(contenido_html: str, ruta: str | Path,
         res = printer.resolution()
         page = printer.pageRect(QPrinter.DevicePixel)
         pintar_documento(painter, page.width(), page.height(), res, contenido_html,
-                         info=info, est=est)
+                         info=info, est=est, fecha=fecha)
     finally:
         painter.end()
 
@@ -247,8 +295,8 @@ def render_pdf(ctx: Contexto, plantilla: Plantilla, ruta: str | Path,
     est = est or E.cargar()
     titulo = render_titulo(ctx, plantilla)
     cuerpo_html = render_cuerpo(ctx, plantilla)
-    contenido = componer_documento(titulo, cuerpo_html, est)
-    render_pdf_documento(contenido, ruta, info=info, est=est)
+    contenido = html_como_editor(componer_documento(titulo, cuerpo_html, est), est)
+    render_pdf_documento(contenido, ruta, info=info, est=est, fecha=fecha_de(ctx))
 
 
 def render_pdf_plantilla_texto(ctx: Contexto, titulo_tpl: str, cuerpo_tpl: str,
@@ -265,8 +313,8 @@ def render_pdf_plantilla_texto(ctx: Contexto, titulo_tpl: str, cuerpo_tpl: str,
     est = est or E.cargar()
     titulo = render_titulo_texto(ctx, titulo_tpl)
     cuerpo_html = render_cuerpo_texto(ctx, cuerpo_tpl)
-    render_pdf_documento(componer_documento(titulo, cuerpo_html, est), ruta,
-                         info=info, est=est)
+    contenido = html_como_editor(componer_documento(titulo, cuerpo_html, est), est)
+    render_pdf_documento(contenido, ruta, info=info, est=est, fecha=fecha_de(ctx))
 
 
 # ======================================================================

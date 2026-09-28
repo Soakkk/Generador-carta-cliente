@@ -16,15 +16,16 @@ ORG_NAME = "Asesoria E. Marin"
 GITHUB_REPO = "Soakkk/Generador-carta-cliente"
 
 # --- Paleta de marca (manual de estilo) ---------------------------------
-GREEN = "#2E4A3C"        # verde corporativo (logo)
+GREEN = "#3A4A3F"        # verde corporativo (el del logo)
 GREEN_SOFT = "#3C5A49"   # verde para texto secundario
 GOLD = "#967537"         # dorado (el de "FISCAL Y LABORAL" en el logo)
 INK = "#2B2B2B"          # color del cuerpo de texto
 CREAM = "#EDE9D9"        # crema (fondo de marca)
 LINE = "#C9C2AC"         # gris-arena para separadores suaves
 
-# --- Datos fijos de la asesoria (pie de pagina) -------------------------
-COMPANY_TITULARES = "Ricardo y Elena Ballesteros Marin"
+# --- Datos fijos de la asesoria (pie de pagina y fecha) -----------------
+COMPANY_LOCALIDAD = "Murcia"   # «Murcia, 28 de septiembre de 2026»
+COMPANY_TITULARES = "Ricardo y Elena Ballesteros Marín"
 COMPANY_DIRECCION = "C/ Alfaro n.º 11, 2.º B · 30001 Murcia"
 COMPANY_TELEFONOS = "Tel. 968 24 93 55 · 651 91 55 02"
 COMPANY_EMAIL = "asesoriaemarin@gmail.com"

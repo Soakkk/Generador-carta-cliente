@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from .. import templates as T
-from ..render import render_preview_textos
+from ..render import fecha_de, render_preview_textos
 from .controles import ComboSinRueda
 from .preview_widget import PreviewPanel
 
@@ -150,7 +150,8 @@ class PlantillaEditorDialog(QWidget):
         def generador(dpi, info):
             titulo = T.render_titulo_texto(ctx, titulo_texto)
             cuerpo_html = T.render_cuerpo_texto(ctx, cuerpo_texto)
-            return render_preview_textos(titulo, cuerpo_html, dpi=dpi, info=info)
+            return render_preview_textos(titulo, cuerpo_html, dpi=dpi, info=info,
+                                         fecha=fecha_de(ctx))
 
         self.preview.mostrar(generador)
 

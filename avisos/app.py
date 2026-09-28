@@ -77,6 +77,7 @@ class MainWindow(QMainWindow):
         self._undo_documento: tuple[int, str] | None = None
         self._extra_buttons: dict[str, QToolButton] = {}
         self._carpeta_destino = str(Path.home() / "Desktop")
+        self._fecha_carta_manual = False  # el usuario eligio otra fecha que la de hoy
 
         self._construir_menu()
         self._construir_ui()
@@ -355,6 +356,26 @@ class MainWindow(QMainWindow):
         self.lbl_aviso_fecha.setObjectName("recordatorioInterno")
         self.lbl_aviso_fecha.setWordWrap(True)
         ly_d.addRow("", self.lbl_aviso_fecha)
+
+        # Lugar y fecha bajo la cabecera: se puede quitar o poner otra fecha.
+        self.chk_fecha_carta = QCheckBox("Fecha en la carta")
+        self.chk_fecha_carta.setChecked(True)
+        self.chk_fecha_carta.setToolTip(
+            f"Pone «{config.COMPANY_LOCALIDAD}, …» con esta fecha bajo la cabecera de la carta")
+        self.date_carta = FechaSinRueda()
+        self.date_carta.setCalendarPopup(True)
+        self.date_carta.setDisplayFormat("dd/MM/yyyy")
+        self.date_carta.setMinimumWidth(112)
+        self.date_carta.setDate(QDate.currentDate())
+        self.chk_fecha_carta.toggled.connect(self._on_con_fecha_cambia)
+        self.date_carta.dateChanged.connect(self._on_fecha_carta_cambia)
+        fecha_carta_widget = QWidget()
+        fila_fecha_carta = QHBoxLayout(fecha_carta_widget)
+        fila_fecha_carta.setContentsMargins(0, 0, 0, 0)
+        fila_fecha_carta.setSpacing(8)
+        fila_fecha_carta.addWidget(self.chk_fecha_carta)
+        fila_fecha_carta.addWidget(self.date_carta, 1)
+        ly_d.addRow(fecha_carta_widget)
 
         self.chk_navidad = QCheckBox("Incluir felicitación navideña")
         self.chk_navidad.stateChanged.connect(self._al_cambiar_datos)
@@ -660,7 +681,17 @@ class MainWindow(QMainWindow):
             documentos_extra=self._extras_marcados(),
             navidad=self.chk_navidad.isChecked(),
             notas=self.txt_notas.toPlainText(),
+            con_fecha=self.chk_fecha_carta.isChecked(),
+            fecha_carta=self._fecha_carta_elegida(),
         )
+
+    def _fecha_carta_elegida(self) -> date | None:
+        """Fecha elegida a mano para la carta; None = la del dia en que se
+        genera (aunque el programa lleve abierto desde ayer)."""
+        if not self._fecha_carta_manual:
+            return None
+        qd = self.date_carta.date()
+        return date(qd.year(), qd.month(), qd.day())
 
     def _extras_marcados(self) -> list[tuple[str, list[str]]]:
         disponibles = {e.etiqueta: e for e in X.cargar()}
@@ -707,6 +738,30 @@ class MainWindow(QMainWindow):
     def _on_fecha_cambia(self) -> None:
         self._actualizar_aviso_fecha()
         self._al_cambiar_datos()
+
+    # La fecha de la carta no forma parte del texto editable: al cambiarla
+    # solo se vuelve a dibujar la hoja.
+    def _on_con_fecha_cambia(self, activa: bool) -> None:
+        self.date_carta.setEnabled(activa)
+        self._actualizar_ajustes(con_fecha=activa)
+        self._programar_preview()
+
+    def _on_fecha_carta_cambia(self) -> None:
+        self._fecha_carta_manual = self.date_carta.date() != QDate.currentDate()
+        self._programar_preview()
+
+    def _sincronizar_fecha_carta(self) -> None:
+        """Sin fecha elegida a mano, el selector muestra siempre la de hoy."""
+        if not self._fecha_carta_manual and self.date_carta.date() != QDate.currentDate():
+            bloqueado = self.date_carta.blockSignals(True)
+            self.date_carta.setDate(QDate.currentDate())
+            self.date_carta.blockSignals(bloqueado)
+
+    def _fecha_en_carta(self) -> date | None:
+        """Fecha que se imprime en la carta, o None si va sin fecha."""
+        if not self.chk_fecha_carta.isChecked():
+            return None
+        return self._fecha_carta_elegida() or R.fecha_carta()
 
     def _actualizar_aviso_fecha(self) -> None:
         qd = self.date_limite.date()
@@ -1199,10 +1254,13 @@ class MainWindow(QMainWindow):
     def _actualizar_preview(self) -> None:
         if not hasattr(self, "preview"):
             return
+        self._sincronizar_fecha_carta()
         html = self.editor.toHtml()
+        fecha = self._fecha_en_carta()
 
         def generador(dpi, info):
-            return R.render_preview_documento(html, dpi=dpi, info=info, est=E.cargar())
+            return R.render_preview_documento(html, dpi=dpi, info=info, est=E.cargar(),
+                                              fecha=fecha)
 
         info = self.preview.mostrar(generador)
         desborda = bool(info.get("desborda"))
@@ -1268,7 +1326,8 @@ class MainWindow(QMainWindow):
 
         info: dict = {}
         try:
-            R.render_pdf_documento(self.editor.toHtml(), destino, info=info, est=E.cargar())
+            R.render_pdf_documento(self.editor.toHtml(), destino, info=info, est=E.cargar(),
+                                   fecha=R.fecha_de(ctx))
         except Exception as e:
             logger.exception("Fallo al generar el PDF %s", destino)
             QMessageBox.critical(self, "Error", f"No se pudo generar el PDF:\n{e}")
@@ -1548,6 +1607,11 @@ class MainWindow(QMainWindow):
         sizes = datos.get("splitter")
         if isinstance(sizes, list) and len(sizes) == 2:
             self.splitter.setSizes([int(s) for s in sizes])
+        con_fecha = bool(datos.get("con_fecha", True))
+        bloqueado = self.chk_fecha_carta.blockSignals(True)
+        self.chk_fecha_carta.setChecked(con_fecha)
+        self.chk_fecha_carta.blockSignals(bloqueado)
+        self.date_carta.setEnabled(con_fecha)
 
     def _guardar_ajustes(self, carpeta: Path) -> None:
         self._carpeta_destino = str(carpeta)
