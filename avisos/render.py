@@ -60,6 +60,11 @@ def fecha_de(ctx: Contexto) -> date | None:
     return ctx.fecha_carta or fecha_carta()
 
 
+def texto_fecha(fecha: date) -> str:
+    """Linea de lugar y fecha: «Murcia, 28 de septiembre de 2026»."""
+    return f"{config.COMPANY_LOCALIDAD}, {fecha_larga(fecha)}"
+
+
 def stylesheet(est: E.Estilo) -> str:
     return (
         f"p{{color:{config.INK};line-height:{est.interlineado}%;"
@@ -194,8 +199,7 @@ def pintar_documento(painter: QPainter, ancho_px: float, alto_px: float,
         painter.setFont(f_fecha)
         painter.setPen(QColor(config.INK))
         painter.drawText(QRectF(texto_x0, y, texto_w, _mm(ppm, 5)),
-                         int(Qt.AlignRight | Qt.AlignTop),
-                         f"{config.COMPANY_LOCALIDAD}, {fecha_larga(fecha)}")
+                         int(Qt.AlignRight | Qt.AlignTop), texto_fecha(fecha))
         y += _mm(ppm, 8)
     else:
         y += _mm(ppm, 5)

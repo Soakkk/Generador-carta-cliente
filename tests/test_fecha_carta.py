@@ -5,10 +5,11 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import QDate
-from PySide6.QtPdf import QPdfDocument
 from PySide6.QtWidgets import QApplication
 
 from avisos import render, templates
+
+_OSCURO = bytes(1 if v < 200 else 0 for v in range(256))
 
 
 @pytest.fixture(scope="module")
@@ -25,26 +26,59 @@ def entorno(monkeypatch, tmp_path):
     monkeypatch.setattr(render, "fecha_carta", lambda: date(2026, 4, 1))
 
 
-def _texto_pdf(ctx: templates.Contexto, tmp_path) -> str:
-    ruta = tmp_path / "carta.pdf"
-    render.render_pdf(ctx, templates.PLANTILLAS[0], ruta)
-    documento = QPdfDocument()
-    assert documento.load(str(ruta)) == QPdfDocument.Error.None_
-    return documento.getAllText(0).text()
+def test_la_fecha_es_la_del_dia_salvo_que_se_cambie_o_se_quite():
+    assert render.fecha_de(templates.Contexto()) == date(2026, 4, 1)
+    assert render.fecha_de(templates.Contexto(fecha_carta=date(2026, 3, 20))) == date(2026, 3, 20)
+    assert render.fecha_de(templates.Contexto(con_fecha=False)) is None
+    assert render.texto_fecha(date(2026, 4, 1)) == "Murcia, 1 de abril de 2026"
 
 
-def test_la_carta_lleva_la_fecha_del_dia_por_defecto(qapp, tmp_path):
-    assert "Murcia, 1 de abril de 2026" in _texto_pdf(templates.Contexto(), tmp_path)
+def test_los_pdf_llevan_la_fecha_del_contexto(qapp, tmp_path, monkeypatch):
+    recibidas = []
+    pintar = render.pintar_documento
+
+    def espia(*args, fecha=None, **kwargs):
+        recibidas.append(fecha)
+        return pintar(*args, fecha=fecha, **kwargs)
+
+    monkeypatch.setattr(render, "pintar_documento", espia)
+    render.render_pdf(templates.Contexto(fecha_carta=date(2026, 3, 20)),
+                      templates.PLANTILLAS[0], tmp_path / "uno.pdf")
+    render.render_pdf_plantilla_texto(templates.Contexto(con_fecha=False),
+                                      "Aviso", "Texto.", tmp_path / "lote.pdf")
+    assert recibidas == [date(2026, 3, 20), None]
 
 
-def test_la_fecha_de_la_carta_se_puede_cambiar(qapp, tmp_path):
-    ctx = templates.Contexto(fecha_carta=date(2026, 3, 20))
-    assert "Murcia, 20 de marzo de 2026" in _texto_pdf(ctx, tmp_path)
+def _primera_tinta_bajo_la_cabecera_mm(img) -> float | None:
+    """mm desde la línea dorada de la cabecera hasta la primera tinta en los
+    últimos 5 mm por la derecha del texto, donde acaba «Murcia, …». El título,
+    centrado, no llega; el primer párrafo sí, pero mucho más abajo."""
+    w, h, bpl = img.width(), img.height(), img.bytesPerLine()
+    px_mm = w / render.A4_W_MM
+    datos = bytes(img.constBits()).translate(_OSCURO)
+
+    def tinta(y: int, x0: int, x1: int) -> bool:
+        return 1 in datos[y * bpl + 4 * x0:y * bpl + 4 * x1]
+
+    x_linea = int(20 * px_mm)   # sobre la línea dorada, fuera del logo y del texto
+    linea = next(y for y in range(h // 3) if tinta(y, x_linea, x_linea + 1))
+    bajo_linea = next(y for y in range(linea, h) if not tinta(y, x_linea, x_linea + 1))
+    x1 = int((render.A4_W_MM - render.MARGEN_X - render.SANGRIA_TEXTO) * px_mm)
+    x0 = x1 - int(5 * px_mm)
+    for y in range(bajo_linea, h // 2):
+        if tinta(y, x0, x1):
+            return (y - linea) / px_mm
+    return None
 
 
-def test_la_fecha_de_la_carta_se_puede_quitar(qapp, tmp_path):
-    texto = _texto_pdf(templates.Contexto(con_fecha=False), tmp_path)
-    assert "Murcia," not in texto
+def test_la_linea_de_fecha_solo_se_dibuja_si_esta_activa(qapp):
+    plantilla = templates.PLANTILLAS[0]
+    con = render.render_preview(templates.Contexto(), plantilla, dpi=150)
+    sin = render.render_preview(templates.Contexto(con_fecha=False), plantilla, dpi=150)
+    distancia_con = _primera_tinta_bajo_la_cabecera_mm(con)
+    distancia_sin = _primera_tinta_bajo_la_cabecera_mm(sin)
+    assert distancia_con is not None and distancia_con < 8
+    assert distancia_sin is None or distancia_sin > 12
 
 
 def test_el_formulario_permite_cambiar_y_quitar_la_fecha(qapp):
