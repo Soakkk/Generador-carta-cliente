@@ -29,6 +29,13 @@ A4_W_MM, A4_H_MM = 210.0, 297.0
 MARGEN_X = 18.0
 MARGEN_SUP = 13.0
 MARGEN_INF = 16.0
+# El texto (y la fecha) entra un poco respecto a las lineas doradas: lineas
+# mas cortas, mas faciles de leer. Logo, lineas y pie no cambian.
+SANGRIA_TEXTO = 7.0
+
+# Aire bajo el titulo y entre vinetas (puntos).
+ESPACIO_TITULO_PT = 14.0
+ESPACIO_VINETA_PT = 3.0
 
 # Tamanos del titulo, la fecha y el pie como diferencia respecto al tamano de
 # cuerpo (configurable), para que todo escale de forma proporcional.
@@ -57,7 +64,7 @@ def stylesheet(est: E.Estilo) -> str:
     return (
         f"p{{color:{config.INK};line-height:{est.interlineado}%;"
         f"margin:{est.espacio_parrafo}pt 0;text-align:justify;}}"
-        f"li{{color:{config.INK};margin:1pt 0;text-align:left;}}"
+        f"li{{color:{config.INK};margin:{ESPACIO_VINETA_PT:g}pt 0;text-align:left;}}"
         f"b{{color:{config.GREEN_SOFT};}}"
     )
 
@@ -68,7 +75,8 @@ def componer_documento(titulo: str, cuerpo_html: str, est: E.Estilo) -> str:
     title_pt = est.tamano_cuerpo + DELTA_TITULO
     titulo_html = (
         f'<p align="center" style="font-size:{title_pt:.1f}pt;font-weight:bold;'
-        f'color:{config.GREEN};text-align:center;margin-bottom:11pt;">{escape(titulo)}</p>'
+        f'color:{config.GREEN};text-align:center;margin-bottom:{ESPACIO_TITULO_PT:g}pt;">'
+        f'{escape(titulo)}</p>'
     )
     return titulo_html + cuerpo_html
 
@@ -83,21 +91,23 @@ def aplicar_margenes_bloques(doc: QTextDocument, est: E.Estilo) -> None:
     asi que hay que fijarlo por codigo para que el EDITOR muestre el mismo
     espaciado que el PDF y sea de verdad WYSIWYG."""
     espacio = est.espacio_parrafo * _PT_A_PX
-    titulo_gap = 11.0 * _PT_A_PX
+    titulo_gap = ESPACIO_TITULO_PT * _PT_A_PX
+    vineta = ESPACIO_VINETA_PT * _PT_A_PX
     primero_visto = False
     prev_lista = False
     block = doc.begin()
     while block.isValid():
+        bf = block.blockFormat()
         if block.textList() is None:
-            bf = block.blockFormat()
             # Deja aire tras una lista dando margen superior al parrafo siguiente.
             bf.setTopMargin(espacio if prev_lista else 0)
             bf.setBottomMargin(titulo_gap if not primero_visto else espacio)
-            cur = QTextCursor(block)
-            cur.mergeBlockFormat(bf)
             prev_lista = False
         else:
+            bf.setTopMargin(vineta)
+            bf.setBottomMargin(vineta)
             prev_lista = True
+        QTextCursor(block).mergeBlockFormat(bf)
         if block.text().strip():
             primero_visto = True
         block = block.next()
@@ -158,6 +168,8 @@ def pintar_documento(painter: QPainter, ancho_px: float, alto_px: float,
 
     x0 = _mm(ppm, MARGEN_X)
     content_w = ancho_px - 2 * x0
+    texto_x0 = x0 + _mm(ppm, SANGRIA_TEXTO)
+    texto_w = content_w - 2 * _mm(ppm, SANGRIA_TEXTO)
     y = _mm(ppm, MARGEN_SUP)
 
     painter.fillRect(QRectF(0, 0, ancho_px, alto_px), QColor("#FFFFFF"))
@@ -181,7 +193,8 @@ def pintar_documento(painter: QPainter, ancho_px: float, alto_px: float,
         f_fecha.setPointSizeF(est.tamano_cuerpo + DELTA_FECHA)
         painter.setFont(f_fecha)
         painter.setPen(QColor(config.INK))
-        painter.drawText(QRectF(x0, y, content_w, _mm(ppm, 5)), int(Qt.AlignRight | Qt.AlignTop),
+        painter.drawText(QRectF(texto_x0, y, texto_w, _mm(ppm, 5)),
+                         int(Qt.AlignRight | Qt.AlignTop),
                          f"{config.COMPANY_LOCALIDAD}, {fecha_larga(fecha)}")
         y += _mm(ppm, 8)
     else:
@@ -192,12 +205,12 @@ def pintar_documento(painter: QPainter, ancho_px: float, alto_px: float,
 
     # --- Contenido: maquetado directamente a la resolucion del destino ---
     alto_disponible = max(pie_y - y, 1)
-    doc = _doc_desde_html(contenido_html, content_w, est, painter.device())
+    doc = _doc_desde_html(contenido_html, texto_w, est, painter.device())
     if info is not None:
         info["desborda"] = doc.size().height() > alto_disponible
     painter.save()
-    painter.translate(x0, y)
-    doc.drawContents(painter, QRectF(0, 0, content_w, alto_disponible))
+    painter.translate(texto_x0, y)
+    doc.drawContents(painter, QRectF(0, 0, texto_w, alto_disponible))
     painter.restore()
 
     # --- Pie de pagina ---
