@@ -304,19 +304,21 @@ check("domiciliacion 130/131/303/309 del 4T termina el 27 de enero",
 # y el QPrinter imprime a 1200 DPI; ver avisos/render.py _QTEXTDOCUMENT_DPI)
 from avisos.render import render_preview as _render_preview_test
 
+_OSCURO = bytes(1 if v < 200 else 0 for v in range(256))
+
 def _extension_vertical_texto(img):
-    # Franja del cuerpo del texto bajo la cabecera. Desde la 1.13.3 el logo
-    # no lleva recuadro crema y la cabecera mide ~11,8 mm menos (4 % del
-    # folio), asi que la franja sube lo mismo para medir las mismas lineas.
-    w, h = img.width(), img.height()
-    filas = 0
-    for y in range(int(h * 0.20), int(h * 0.51)):
-        for x in range(0, w, 4):
-            c = img.pixelColor(x, y)
-            if c.red() < 200 or c.green() < 200 or c.blue() < 200:
-                filas += 1
-                break
-    return filas
+    # Alto, en filas, de lo que hay entre la cabecera y el pie: de la primera
+    # a la ultima fila con tinta entre el 10 % y el 88 % del folio. El logo,
+    # las lineas y la fecha se dibujan en mm y escalan con el DPI; si el texto
+    # no escalase, este alto no creceria en proporcion. A diferencia de contar
+    # filas con tinta en una franja fija, no depende de donde empiece el texto
+    # ni del suavizado de las letras (en Windows, a 96 DPI, rellena el hueco
+    # entre lineas y la cuenta quedaba al borde del umbral).
+    w, h, bpl = img.width(), img.height(), img.bytesPerLine()
+    datos = bytes(img.constBits()).translate(_OSCURO)
+    con_tinta = [y for y in range(int(h * 0.10), int(h * 0.88))
+                 if 1 in datos[y * bpl:y * bpl + 4 * w]]
+    return con_tinta[-1] - con_tinta[0] + 1 if con_tinta else 0
 
 ctx_dpi = T.Contexto(periodo="1T", anio=2026, cliente="Juan Pérez",
                      documentos=T.PLANTILLAS[0].documentos_def)
