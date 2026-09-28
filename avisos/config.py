@@ -18,7 +18,7 @@ GITHUB_REPO = "Soakkk/Generador-carta-cliente"
 # --- Paleta de marca (manual de estilo) ---------------------------------
 GREEN = "#2E4A3C"        # verde corporativo (logo)
 GREEN_SOFT = "#3C5A49"   # verde para texto secundario
-GOLD = "#B8995A"         # dorado/arena (linea "FISCAL Y LABORAL")
+GOLD = "#967537"         # dorado (el de "FISCAL Y LABORAL" en el logo)
 INK = "#2B2B2B"          # color del cuerpo de texto
 CREAM = "#EDE9D9"        # crema (fondo de marca)
 LINE = "#C9C2AC"         # gris-arena para separadores suaves

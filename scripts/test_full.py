@@ -305,9 +305,12 @@ check("domiciliacion 130/131/303/309 del 4T termina el 27 de enero",
 from avisos.render import render_preview as _render_preview_test
 
 def _extension_vertical_texto(img):
+    # Franja del cuerpo del texto bajo la cabecera. Desde la 1.13.3 el logo
+    # no lleva recuadro crema y la cabecera mide ~11,8 mm menos (4 % del
+    # folio), asi que la franja sube lo mismo para medir las mismas lineas.
     w, h = img.width(), img.height()
     filas = 0
-    for y in range(int(h * 0.24), int(h * 0.55)):
+    for y in range(int(h * 0.20), int(h * 0.51)):
         for x in range(0, w, 4):
             c = img.pixelColor(x, y)
             if c.red() < 200 or c.green() < 200 or c.blue() < 200:

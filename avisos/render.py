@@ -140,7 +140,7 @@ def pintar_documento(painter: QPainter, ancho_px: float, alto_px: float,
         y += escala.height() + _mm(ppm, 3)
 
     # --- Linea dorada ---
-    painter.fillRect(QRectF(x0, y, content_w, _mm(ppm, 0.7)), QColor(config.GOLD))
+    painter.fillRect(QRectF(x0, y, content_w, _mm(ppm, 0.5)), QColor(config.GOLD))
     y += _mm(ppm, 5)
 
     # --- Pie de pagina: se calcula antes para saber el hueco disponible ---
