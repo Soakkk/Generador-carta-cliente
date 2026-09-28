@@ -10,8 +10,8 @@ from dataclasses import dataclass
 
 FUENTE_DEF = "Georgia"
 TAMANO_CUERPO_DEF = 10.5
-INTERLINEADO_DEF = 115.0   # porcentaje
-ESPACIO_PARRAFO_DEF = 6.0  # puntos
+INTERLINEADO_DEF = 130.0    # porcentaje
+ESPACIO_PARRAFO_DEF = 10.0  # puntos
 
 
 @dataclass

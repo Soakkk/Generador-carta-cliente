@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from .. import clients as C
 from .. import history as H
+from .. import render as R
 from .. import templates as T
 from ..batch import BatchItem, BatchState, borrar_lote, cargar_lote, guardar_lote
 from ..render import render_pdf_plantilla_texto
@@ -191,6 +192,10 @@ class LoteDialog(QDialog):
             ),
             "navidad": self._ctx_base.navidad,
             "notas": self._ctx_base.notas,
+            "con_fecha": self._ctx_base.con_fecha,
+            "fecha_carta": (
+                self._ctx_base.fecha_carta.isoformat() if self._ctx_base.fecha_carta else ""
+            ),
             "extras": list(self._extras_etiquetas),
             "titulo_tpl": self._documento_tpl[0],
             "cuerpo_tpl": self._documento_tpl[1],
@@ -218,6 +223,8 @@ class LoteDialog(QDialog):
             ]
             fecha_txt = str(cfg.get("fecha_limite", ""))
             fecha_limite = date.fromisoformat(fecha_txt) if fecha_txt else None
+            dia_carta_txt = str(cfg.get("fecha_carta", ""))
+            dia_carta = date.fromisoformat(dia_carta_txt) if dia_carta_txt else None
             if periodo not in T.PERIODOS or not all(isinstance(d, str) for d in documentos):
                 return None
         except (KeyError, TypeError, ValueError):
@@ -231,12 +238,17 @@ class LoteDialog(QDialog):
             fecha_limite=fecha_limite,
             navidad=bool(cfg.get("navidad", False)),
             notas=str(cfg.get("notas", "")),
+            con_fecha=bool(cfg.get("con_fecha", True)),
+            fecha_carta=dia_carta,
         )
         self._documento_tpl = (titulo, cuerpo)
         self._extras_etiquetas = [str(extra) for extra in extras]
         return lote
 
     def _iniciar_lote(self, nombres: list[str]) -> None:
+        # Toda la serie lleva la misma fecha, aunque se reanude otro dia.
+        if self._ctx_base.con_fecha and self._ctx_base.fecha_carta is None:
+            self._ctx_base = replace(self._ctx_base, fecha_carta=R.fecha_carta())
         items: list[BatchItem] = []
         clientes = C.cargar()
         for indice, nombre in enumerate(nombres, start=1):

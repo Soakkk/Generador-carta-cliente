@@ -197,6 +197,10 @@ class Contexto:
     documentos_extra: list[tuple[str, list[str]]] = field(default_factory=list)
     navidad: bool = False
     notas: str = ""
+    # Lugar y fecha bajo la cabecera: se pueden quitar (con_fecha) o poner
+    # otra fecha (fecha_carta; None -> la del dia en que se genera).
+    con_fecha: bool = True
+    fecha_carta: date | None = None
 
     @property
     def periodo_largo(self) -> str:

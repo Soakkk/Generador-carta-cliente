@@ -52,6 +52,9 @@ periodo, año, fecha límite, nombre del cliente y la lista de documentos.
   directo a la edición de contenido y aviso visible si el texto no cabe en una
   sola página o si hay cambios del formulario pendientes de aplicar.
 - Cabecera con el logo, colores de marca y pie de página fijo en todos los avisos.
+- **Lugar y fecha** («Murcia, 28 de septiembre de 2026») bajo la cabecera, con la fecha
+  del día. Desde el formulario se puede quitar (la preferencia se recuerda) o poner otra
+  fecha; en «Generar para varios clientes» toda la serie lleva la misma.
 - **Base de datos de clientes** (nombre, NIF, teléfono, email) con búsqueda por
   nombre o NIF, alta y edición rápida desde el aviso y buscador en la gestión de
   clientes. El NIF se rellena automáticamente en el aviso.

@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 
 from .. import estilo as E
 from .. import templates as T
-from ..render import render_preview_textos
+from ..render import fecha_de, render_preview_textos
 from .controles import DoubleSpinSinRueda, FuenteSinRueda
 from .preview_widget import PreviewPanel
 
@@ -132,7 +132,8 @@ class FormatoDialog(QWidget):
         cuerpo_html = T.render_cuerpo(ctx, plantilla)
 
         def generador(dpi, info):
-            return render_preview_textos(titulo, cuerpo_html, dpi=dpi, info=info, est=est)
+            return render_preview_textos(titulo, cuerpo_html, dpi=dpi, info=info, est=est,
+                                         fecha=fecha_de(ctx))
 
         self.preview.mostrar(generador)
 

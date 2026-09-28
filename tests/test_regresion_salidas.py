@@ -57,6 +57,12 @@ def sin_plantillas_personalizadas(monkeypatch, tmp_path):
     monkeypatch.setattr(templates, "_overrides_cache", {})
 
 
+@pytest.fixture(autouse=True)
+def fecha_de_carta_fija(monkeypatch):
+    # La carta lleva la fecha del día; fijada, el raster no cambia cada día.
+    monkeypatch.setattr(render, "fecha_carta", lambda: date(2026, 4, 1))
+
+
 def _contexto(plantilla_id: str) -> templates.Contexto:
     return templates.Contexto(
         periodo="4T" if plantilla_id == "cierre_anual" else "1T",
